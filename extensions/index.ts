@@ -77,6 +77,12 @@ interface SettingsFile {
 	liveToolPreview?: boolean;
 	/** Number of live output lines to show while collapsed. Defaults to 5. */
 	liveToolPreviewLines?: number;
+	/**
+	 * Register this extension's built-in grep/find tools. Defaults to auto:
+	 * disabled when pi-fff is configured in override mode so its grep/find
+	 * tools can own those global names without extension conflicts.
+	 */
+	registerSearchTools?: boolean;
 	showTruncationHints?: boolean;
 	diffCollapsedLines?: number;
 	diffTheme?: string;
@@ -159,6 +165,17 @@ function writeSettingsKey(key: string, value: unknown): void {
 		mkdirSync(dir, { recursive: true });
 		writeFileSync(path, JSON.stringify(settings, null, 2) + "\n");
 	} catch { /* best effort */ }
+}
+
+function isFffOverrideMode(pi: ExtensionAPI): boolean {
+	const flag = typeof (pi as any).getFlag === "function" ? (pi as any).getFlag("fff-mode") : undefined;
+	return flag === "override" || process.env.PI_FFF_MODE === "override";
+}
+
+function shouldRegisterSearchTools(pi: ExtensionAPI): boolean {
+	const setting = readSettings().registerSearchTools;
+	if (typeof setting === "boolean") return setting;
+	return !isFffOverrideMode(pi);
 }
 
 let toolBackgroundOverride: "default" | "transparent" | "outlines" | null = null;
@@ -859,7 +876,7 @@ function patchToolExecutionRenderers(): void {
 
 	if (typeof originalHasRendererDefinition === "function") {
 		proto.hasRendererDefinition = function patchedHasRendererDefinition() {
-			return originalHasRendererDefinition.call(this) || shouldUseGenericToolRenderer(this?.toolName);
+			return originalHasRendererDefinition.call(this) || shouldUseSearchToolRenderer(this?.toolName) || shouldUseGenericToolRenderer(this?.toolName);
 		};
 	}
 
@@ -868,6 +885,12 @@ function patchToolExecutionRenderers(): void {
 		if (toolName === "apply_patch") {
 			return (args: any, theme: Theme, ctx: any) =>
 				renderApplyPatchCall(args, theme, ctx, (path: string) => shortPath(ctx.cwd ?? process.cwd(), path));
+		}
+		if (toolName === "grep") {
+			return (args: any, theme: Theme, ctx: any) => renderGrepToolCall(args, theme, ctx);
+		}
+		if (toolName === "find") {
+			return (args: any, theme: Theme, ctx: any) => renderFindToolCall(args, theme, ctx);
 		}
 		if (shouldUseGenericToolRenderer(toolName)) {
 			return (args: any, theme: Theme, ctx: any) => renderGenericToolCall(toolName, args, theme, ctx);
@@ -880,6 +903,14 @@ function patchToolExecutionRenderers(): void {
 		if (toolName === "apply_patch") {
 			return (result: any, options: any, theme: Theme, ctx: any) =>
 				renderApplyPatchResult({ content: result.content, details: result.details }, options.isPartial, theme, ctx);
+		}
+		if (toolName === "grep") {
+			return (result: any, options: any, theme: Theme, ctx: any) =>
+				renderGrepToolResult(result, options, theme, ctx);
+		}
+		if (toolName === "find") {
+			return (result: any, options: any, theme: Theme, ctx: any) =>
+				renderFindToolResult(result, options, theme, ctx);
 		}
 		if (shouldUseGenericToolRenderer(toolName)) {
 			return (result: any, options: any, theme: Theme, ctx: any) =>
@@ -3018,8 +3049,81 @@ function shouldUseGenericToolRenderer(name: unknown): boolean {
 	return typeof name === "string" && name.length > 0 && !CORE_TOOL_OVERRIDES.has(name);
 }
 
+function shouldUseSearchToolRenderer(name: unknown): name is "grep" | "find" {
+	return name === "grep" || name === "find";
+}
+
 function genericToolLabel(name: string): string {
 	return isMcpToolName(name) ? "MCP" : humanizeToolName(name);
+}
+
+function renderGrepToolCall(args: any, theme: Theme, ctx: any): Text {
+	syncToolCallStatus(ctx);
+	const summary = stableCallSummary(ctx, "_callSummary", () => {
+		const pattern = getStringArg(args, "pattern", "query");
+		let value = `\"${summarizeText(pattern, 40)}\"`;
+		const path = getStringArg(args, "path", "constraints");
+		if (path) value += ` in ${path}`;
+		return value;
+	});
+	return makeText(ctx.lastComponent, toolHeader("Grep", summary, theme, toolStatusDot(ctx, theme)));
+}
+
+function renderGrepToolResult(result: any, { expanded, isPartial }: any, theme: Theme, ctx: any): Text {
+	if (isPartial) {
+		return makeText(ctx.lastComponent, runningPreviewBlock(result, theme.fg("dim", "Searching..."), expanded, theme, ctx));
+	}
+	clearBlinkTimer(ctx);
+	setToolStatus(ctx, ctx.isError ? "error" : "success");
+	const details = result.details as GrepToolDetails | undefined;
+	const matches = getTextContent(result)
+		.split("\n")
+		.filter((line) => line.trim().length > 0);
+	if (matches.length === 0) return makeText(ctx.lastComponent, withBranch(theme.fg("muted", "no matches"), theme));
+	let text = theme.fg("muted", `${matches.length} matches`);
+	if (details?.truncation?.truncated) text += theme.fg("warning", " (truncated)");
+	if (!expanded) return makeText(ctx.lastComponent, withBranch(`${text}${theme.fg("muted", " • Ctrl+O to expand")}`, theme));
+	text += `\n${buildPreviewText(matches.map((line) => theme.fg("dim", line)), false, theme, previewLimit())}`;
+	return makeText(ctx.lastComponent, withBranch(text, theme));
+}
+
+function renderFindToolCall(args: any, theme: Theme, ctx: any): Text {
+	syncToolCallStatus(ctx);
+	const summary = stableCallSummary(ctx, "_callSummary", () => {
+		const pattern = getStringArg(args, "pattern", "query");
+		let value = `\"${summarizeText(pattern, 40)}\"`;
+		const path = getStringArg(args, "path", "constraints");
+		if (path) value += ` in ${path}`;
+		return value;
+	});
+	return makeText(ctx.lastComponent, toolHeader("Find", summary, theme, toolStatusDot(ctx, theme)));
+}
+
+function renderFindToolResult(result: any, { expanded, isPartial }: any, theme: Theme, ctx: any): Text {
+	if (isPartial) {
+		return makeText(ctx.lastComponent, runningPreviewBlock(result, theme.fg("dim", "Finding..."), expanded, theme, ctx));
+	}
+	clearBlinkTimer(ctx);
+	setToolStatus(ctx, ctx.isError ? "error" : "success");
+	const items = getTextContent(result)
+		.split("\n")
+		.filter((line) => line.trim().length > 0);
+	if (items.length === 0) return makeText(ctx.lastComponent, withBranch(theme.fg("muted", "no files found"), theme));
+	let text = theme.fg("muted", `${items.length} files`);
+	if (!expanded) return makeText(ctx.lastComponent, withBranch(`${text}${theme.fg("muted", " • Ctrl+O to expand")}`, theme));
+	const shown = items.slice(0, previewLimit());
+	const findLines: string[] = [];
+	for (const item of shown) {
+		const clean = item.trim();
+		const icon = clean.startsWith("[") ? "" : fileIcon(clean);
+		findLines.push(`  ${icon}${theme.fg("dim", clean)}`);
+	}
+	const remaining = items.length - shown.length;
+	if (remaining > 0) {
+		findLines.push(`  ${theme.fg("muted", `… ${remaining} more files`)}`);
+	}
+	text += `\n${findLines.join('\n')}`;
+	return makeText(ctx.lastComponent, withBranch(text, theme));
 }
 
 function renderGenericToolCall(name: string, args: any, theme: Theme, ctx: any): Text {
@@ -4198,90 +4302,41 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
-	const grepTool = createGrepTool(cwd);
-	pi.registerTool({
-		name: "grep",
-		label: "grep",
-		description: grepTool.description,
-		parameters: grepTool.parameters,
-		async execute(toolCallId, params, signal, onUpdate) {
-			return grepTool.execute(toolCallId, params, signal, onUpdate);
-		},
-		renderCall(args, theme, ctx) {
-			syncToolCallStatus(ctx);
-			const summary = stableCallSummary(ctx, "_callSummary", () => {
-				let value = `\"${summarizeText(args.pattern, 40)}\"`;
-				if (args.path) value += ` in ${args.path}`;
-				return value;
-			});
-			return makeText(ctx.lastComponent, toolHeader("Grep", summary, theme, toolStatusDot(ctx, theme)));
-		},
-		renderResult(result, { expanded, isPartial }, theme, ctx) {
-			if (isPartial) {
-				return makeText(ctx.lastComponent, runningPreviewBlock(result, theme.fg("dim", "Searching..."), expanded, theme, ctx));
-			}
-			clearBlinkTimer(ctx);
-			setToolStatus(ctx, ctx.isError ? "error" : "success");
-			const details = result.details as GrepToolDetails | undefined;
-			const matches = (result.content[0]?.type === "text" ? result.content[0].text : "")
-				.split("\n")
-				.filter((line) => line.trim().length > 0);
-			if (matches.length === 0) return makeText(ctx.lastComponent, withBranch(theme.fg("muted", "no matches"), theme));
-			let text = theme.fg("muted", `${matches.length} matches`);
-			if (details?.truncation?.truncated) text += theme.fg("warning", " (truncated)");
-			if (!expanded) return makeText(ctx.lastComponent, withBranch(`${text}${theme.fg("muted", " • Ctrl+O to expand")}`, theme));
-			text += `\n${buildPreviewText(matches.map((line) => theme.fg("dim", line)), false, theme, previewLimit())}`;
-			return makeText(ctx.lastComponent, withBranch(text, theme));
-		},
-	});
+	if (shouldRegisterSearchTools(pi)) {
+		const grepTool = createGrepTool(cwd);
+		pi.registerTool({
+			name: "grep",
+			label: "grep",
+			description: grepTool.description,
+			parameters: grepTool.parameters,
+			async execute(toolCallId, params, signal, onUpdate) {
+				return grepTool.execute(toolCallId, params, signal, onUpdate);
+			},
+			renderCall(args, theme, ctx) {
+				return renderGrepToolCall(args, theme, ctx);
+			},
+			renderResult(result, options, theme, ctx) {
+				return renderGrepToolResult(result, options, theme, ctx);
+			},
+		});
 
-	const findTool = createFindTool(cwd);
-	pi.registerTool({
-		name: "find",
-		label: "find",
-		description: findTool.description,
-		parameters: findTool.parameters,
-		async execute(toolCallId, params, signal, onUpdate) {
-			return findTool.execute(toolCallId, params, signal, onUpdate);
-		},
-		renderCall(args, theme, ctx) {
-			syncToolCallStatus(ctx);
-			const summary = stableCallSummary(ctx, "_callSummary", () => {
-				let value = `\"${summarizeText(args.pattern, 40)}\"`;
-				if (args.path) value += ` in ${args.path}`;
-				return value;
-			});
-			return makeText(ctx.lastComponent, toolHeader("Find", summary, theme, toolStatusDot(ctx, theme)));
-		},
-		renderResult(result, { expanded, isPartial }, theme, ctx) {
-			if (isPartial) {
-				return makeText(ctx.lastComponent, runningPreviewBlock(result, theme.fg("dim", "Finding..."), expanded, theme, ctx));
-			}
-			clearBlinkTimer(ctx);
-			setToolStatus(ctx, ctx.isError ? "error" : "success");
-			const items = (result.content[0]?.type === "text" ? result.content[0].text : "")
-				.split("\n")
-				.filter((line) => line.trim().length > 0);
-			if (items.length === 0) return makeText(ctx.lastComponent, withBranch(theme.fg("muted", "no files found"), theme));
-			let text = theme.fg("muted", `${items.length} files`);
-			if (!expanded) return makeText(ctx.lastComponent, withBranch(`${text}${theme.fg("muted", " • Ctrl+O to expand")}`, theme));
-			// Expanded: grouped find results with icons
-			const maxShow = previewLimit();
-			const shown = items.slice(0, maxShow);
-			const findLines: string[] = [];
-			for (let i = 0; i < shown.length; i++) {
-				const item = shown[i].trim();
-				const icon = fileIcon(item);
-				findLines.push(`  ${icon}${theme.fg("dim", item)}`);
-			}
-			const remaining = items.length - shown.length;
-			if (remaining > 0) {
-				findLines.push(`  ${theme.fg("muted", `… ${remaining} more files`)}`);
-			}
-			text += `\n${findLines.join('\n')}`;
-			return makeText(ctx.lastComponent, withBranch(text, theme));
-		},
-	});
+		const findTool = createFindTool(cwd);
+		pi.registerTool({
+			name: "find",
+			label: "find",
+			description: findTool.description,
+			parameters: findTool.parameters,
+			async execute(toolCallId, params, signal, onUpdate) {
+				return findTool.execute(toolCallId, params, signal, onUpdate);
+			},
+			renderCall(args, theme, ctx) {
+				return renderFindToolCall(args, theme, ctx);
+			},
+			renderResult(result, options, theme, ctx) {
+				return renderFindToolResult(result, options, theme, ctx);
+			},
+		});
+	}
 
 	const lsTool = createLsTool(cwd);
 	pi.registerTool({

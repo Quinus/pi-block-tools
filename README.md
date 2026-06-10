@@ -103,6 +103,20 @@ The selection is persisted as `spinnerVerbColor` / `spinnerStatusColor` in `~/.p
 | `mcpOutputMode` | `hidden`, `summary`, `preview` | `preview` |
 | `bashOutputMode` | `opencode`, `summary`, `preview` | `opencode` |
 
+### Search tool registration
+
+By default, this extension registers Pi-compatible `grep` and `find` tools unless `pi-fff` is configured with `fff-mode=override` or `PI_FFF_MODE=override`. In that mode, `pi-fff` owns the global `grep` / `find` tool names and this extension skips those registrations to avoid extension conflicts.
+
+Set `registerSearchTools` in `.pi/settings.json` or `~/.pi/settings.json` when you need to force the behavior:
+
+```json
+{
+  "registerSearchTools": false
+}
+```
+
+Use `false` when another extension provides `grep` / `find`. Use `true` only when you explicitly want this extension to register those tools.
+
 ### Numeric settings
 
 | Setting | Default | Description |
