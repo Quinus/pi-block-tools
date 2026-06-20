@@ -1,6 +1,6 @@
 {
   "name": "@viniraioli/pi-claude-style-tools",
-  "version": "1.0.33",
+  "version": "1.0.48",
   "description": "Claude Code-style tool rows for pi with Ctrl+O image previews and consistent built-in, MCP, and custom tool rendering",
   "keywords": [
     "pi-package",
@@ -26,6 +26,7 @@
   "files": [
     "extensions/index.ts",
     "extensions/spinner.ts",
+    "themes/claude-code.json",
     "config/config.example.json",
     "README.md"
   ],
@@ -45,6 +46,9 @@
     "extensions": [
       "./extensions/index.ts",
       "./extensions/spinner.ts"
+    ],
+    "themes": [
+      "./themes/claude-code.json"
     ]
   },
   "devDependencies": {

@@ -5,4 +5,5 @@ dist/
 *.d.ts
 # Local Pi runtime state
 .atl/
-.pi/settings.json
+.pi
+

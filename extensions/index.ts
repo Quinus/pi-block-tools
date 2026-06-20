@@ -27,6 +27,7 @@ import {
 	Box,
 	Container,
 	deleteAllKittyImages,
+	Editor,
 	getCapabilities,
 	getImageDimensions,
 	imageFallback,
@@ -57,12 +58,13 @@ const TOOL_CACHE_PATCH_FLAG = Symbol.for("pi-claude-style-tools:patched-tool-cac
 const TOOL_IMAGE_EXPAND_PATCH_FLAG = Symbol.for("pi-claude-style-tools:patched-read-image-expansion");
 const CUSTOM_MESSAGE_PATCH_FLAG = Symbol.for("pi-claude-style-tools:patched-custom-message-render");
 const USER_MESSAGE_PATCH_FLAG = Symbol.for("pi-claude-style-tools:patched-user-message-render");
+const EDITOR_PATCH_FLAG = Symbol.for("pi-claude-style-tools:patched-editor-render");
 const RTK_NOTIFY_PATCH_FLAG = Symbol.for("pi-claude-style-tools:patched-rtk-notify");
 const WRAP_MARK = "\uE000";
 const KITTY_IMAGE_PREFIX = "\x1b_G";
 const ITERM2_IMAGE_PREFIX = "\x1b]1337;File=";
 
-let toolBackgroundMode: "default" | "transparent" | "outlines" = "outlines";
+let toolBackgroundMode: "default" | "transparent" | "outlines" = "transparent";
 
 interface SettingsFile {
 	toolBackground?: "default" | "transparent" | "outlines" | "border";
@@ -186,9 +188,9 @@ function syncToolBackgroundMode(): void {
 		return;
 	}
 	const settings = readSettings();
-	// Backward compat: "border" was renamed to "outlines"
+	// Backward compat: "border" is accepted as the old name for "outlines".
 	const raw = settings.toolBackground === "border" ? "outlines" : settings.toolBackground;
-	toolBackgroundMode = raw ?? "outlines";
+	toolBackgroundMode = raw ?? "transparent";
 }
 
 function setThemeBg(theme: unknown, key: string, value: string): void {
@@ -233,10 +235,6 @@ function sanitizeRenderedTextBlockLines(lines: string[]): string[] {
 
 function isBlankLine(text: string): boolean {
 	return stripAnsi(text).trim().length === 0;
-}
-
-function borderLine(width: number): string {
-	return `${BORDER_COLOR}${"─".repeat(Math.max(1, width))}${TRANSPARENT_RESET}`;
 }
 
 function clampLineWidth(line: string, width: number): string {
@@ -320,13 +318,7 @@ function patchGlobalToolBorders(): void {
 		const spacerLine = " ".repeat(width);
 		let result: string[];
 
-		if (toolBackgroundMode === "outlines") {
-			const ruleWidth = Math.max(1, width);
-			const framed = core.length > 0 ? [borderLine(ruleWidth), ...core, borderLine(ruleWidth)] : [];
-			result = [spacerLine, ...framed, ...imageLines];
-		} else {
-			result = [spacerLine, ...core, ...imageLines];
-		}
+		result = [spacerLine, ...core, ...imageLines];
 
 		(this as any)[TOOL_RENDER_CACHE] = { width, mode: toolBackgroundMode, lines: result };
 		return result;
@@ -633,9 +625,6 @@ function frameToolLikeLines(lines: string[], width: number): string[] {
 	const core = trimRenderedBlankLines(lines).map((line) => clampLineWidth(line, safeWidth));
 	if (core.length === 0 || toolBackgroundMode === "default") return core;
 	const spacerLine = " ".repeat(safeWidth);
-	if (toolBackgroundMode === "outlines") {
-		return [spacerLine, borderLine(safeWidth), ...core, borderLine(safeWidth)];
-	}
 	return [spacerLine, ...core];
 }
 
@@ -691,19 +680,6 @@ function stripBackgroundAnsi(text: string): string {
 	});
 }
 
-function roundedUserBorder(width: number, top: boolean): string {
-	if (width <= 1) return `${BORDER_COLOR}│${TRANSPARENT_RESET}`;
-	const left = top ? "╭" : "╰";
-	const right = top ? "╮" : "╯";
-	if (!top || width < 10) {
-		return `${BORDER_COLOR}${left}${"─".repeat(Math.max(0, width - 2))}${right}${TRANSPARENT_RESET}`;
-	}
-	const label = " User ";
-	const prefix = "─";
-	const suffixWidth = Math.max(0, width - 2 - visibleWidth(prefix) - visibleWidth(label));
-	return `${BORDER_COLOR}${left}${prefix}${TRANSPARENT_RESET}${label}${BORDER_COLOR}${"─".repeat(suffixWidth)}${right}${TRANSPARENT_RESET}`;
-}
-
 function trimAnsiRight(text: string): string {
 	let trimmed = text;
 	while (true) {
@@ -713,15 +689,30 @@ function trimAnsiRight(text: string): string {
 	}
 }
 
-function cleanUserMessageLine(line: string): string {
-	return `${TRANSPARENT_BG}${trimAnsiRight(stripBackgroundAnsi(stripOsc133Zones(line)))}${TRANSPARENT_BG}`;
+function trimAnsiLeft(text: string): string {
+	let trimmed = text;
+	while (true) {
+		const next = trimmed.replace(/^((?:\x1b\[[0-9;]*m)*)[ \t]+/g, "$1");
+		if (next === trimmed) return trimmed;
+		trimmed = next;
+	}
 }
 
-function borderedUserMessageLine(line: string, width: number): string {
-	const innerWidth = Math.max(1, width - 4);
-	const content = clampLineWidth(cleanUserMessageLine(line), innerWidth);
-	const padding = " ".repeat(Math.max(0, innerWidth - visibleWidth(content)));
-	return `${BORDER_COLOR}│${TRANSPARENT_RESET} ${content}${padding} ${BORDER_COLOR}│${TRANSPARENT_RESET}`;
+function cleanUserMessageLine(line: string): string {
+	return trimAnsiLeft(trimAnsiRight(stripBackgroundAnsi(stripOsc133Zones(line))));
+}
+
+const USER_MESSAGE_BG = "\x1b[48;2;47;47;47m";
+const USER_MESSAGE_PROMPT_FG = "\x1b[38;2;220;220;220m";
+const INPUT_PROMPT_FG = "\x1b[38;2;136;136;136m";
+const INPUT_ARROW_FG = "\x1b[38;2;204;204;204m";
+
+function promptUserMessageLine(line: string, width: number, firstLine: boolean): string {
+	const prefix = firstLine ? "› " : "  ";
+	const contentWidth = Math.max(1, width - visibleWidth(prefix));
+	const content = clampLineWidth(cleanUserMessageLine(line), contentWidth);
+	const padding = " ".repeat(Math.max(0, contentWidth - visibleWidth(content)));
+	return `${USER_MESSAGE_BG}${USER_MESSAGE_PROMPT_FG}${prefix}${TRANSPARENT_RESET}${USER_MESSAGE_BG}${content}${padding}${TRANSPARENT_RESET}`;
 }
 
 function patchUserMessageRender(): void {
@@ -731,25 +722,65 @@ function patchUserMessageRender(): void {
 	if (typeof originalRender !== "function") return;
 	proto.render = function patchedUserMessageRender(width: number) {
 		for (const child of (this as any).children ?? []) {
-			if (child instanceof Markdown && child.defaultTextStyle?.bgColor) {
-				child.defaultTextStyle.bgColor = undefined;
+			const markdown = child as any;
+			if (child instanceof Markdown && markdown.defaultTextStyle?.bgColor) {
+				markdown.defaultTextStyle.bgColor = undefined;
 				child.invalidate?.();
 			}
 		}
 		const borderWidth = Math.max(1, width);
-		const contentWidth = Math.max(1, borderWidth - 4);
+		const contentWidth = Math.max(1, borderWidth - 2);
 		const lines = originalRender.call(this, contentWidth);
 		if (!Array.isArray(lines) || lines.length === 0) return lines;
-		const rendered = [
-			roundedUserBorder(borderWidth, true),
-			...lines.map((line: string) => borderedUserMessageLine(line, borderWidth)),
-			roundedUserBorder(borderWidth, false),
-		];
+		const messageLines = lines.filter((line: string) => visibleWidth(cleanUserMessageLine(line)) > 0);
+		if (messageLines.length === 0) return lines;
+		const rendered = messageLines.map((line: string, index: number) => promptUserMessageLine(line, borderWidth, index === 0));
 		rendered[0] = OSC133_ZONE_START + rendered[0];
 		rendered[rendered.length - 1] += OSC133_ZONE_END + OSC133_ZONE_FINAL;
 		return rendered;
 	};
 	proto[USER_MESSAGE_PATCH_FLAG] = true;
+}
+
+function promptEditorBorder(line: string, width: number): string {
+	const plain = line.replace(ANSI_RE, "");
+	const indicator = plain.includes("↑") || plain.includes("↓") ? clampLineWidth(plain, width) : "";
+	const text = indicator ? indicator + "─".repeat(Math.max(0, width - visibleWidth(indicator))) : "─".repeat(Math.max(0, width));
+	return `${INPUT_PROMPT_FG}${text}${TRANSPARENT_RESET}`;
+}
+
+function isPromptEditorBorderLine(line: string): boolean {
+	const plain = line.replace(ANSI_RE, "").trim();
+	return plain.length > 0 && /^[─\s↑↓0-9more]+$/.test(plain);
+}
+
+function promptEditorContentLine(line: string, width: number, firstLine: boolean): string {
+	const prefix = firstLine ? "❯ " : "  ";
+	const contentWidth = Math.max(0, width - visibleWidth(prefix));
+	const content = clampLineWidth(line, contentWidth);
+	const padding = " ".repeat(Math.max(0, contentWidth - visibleWidth(content)));
+	return `${INPUT_ARROW_FG}${prefix}${TRANSPARENT_RESET}${content}${padding}`;
+}
+
+function patchEditorRender(): void {
+	const proto = Editor.prototype as any;
+	if (proto[EDITOR_PATCH_FLAG]) return;
+	const originalRender = proto.render;
+	if (typeof originalRender !== "function") return;
+	proto.render = function patchedEditorRender(width: number) {
+		const editorWidth = Math.max(1, width);
+		const innerWidth = Math.max(1, editorWidth - 2);
+		const lines = originalRender.call(this, innerWidth);
+		if (!Array.isArray(lines) || lines.length === 0) return lines;
+		let contentIndex = 0;
+		return lines.map((line: string) => {
+			if (isPromptEditorBorderLine(line)) return promptEditorBorder(line, editorWidth);
+			const rendered = promptEditorContentLine(line, editorWidth, contentIndex === 0);
+			contentIndex++;
+			return rendered;
+		});
+	};
+	proto[EDITOR_PATCH_FLAG] = true;
 }
 
 function patchAssistantMessages(): void {
@@ -1700,10 +1731,6 @@ function themeAdaptiveEnabled(): boolean {
 let DIFF_THEME: BundledTheme = (process.env.DIFF_THEME as BundledTheme | undefined) ?? "github-dark";
 let codeToAnsiLoader: Promise<any> | null = null;
 
-const SPLIT_MIN_WIDTH = 150;
-const SPLIT_MIN_CODE_WIDTH = 60;
-const SPLIT_MAX_WRAP_RATIO = 0.2;
-const SPLIT_MAX_WRAP_LINES = 8;
 const MAX_TERM_WIDTH = 210;
 const DEFAULT_TERM_WIDTH = 200;
 const MAX_PREVIEW_LINES = 60;
@@ -1857,7 +1884,7 @@ function applyThemePaletteIfNeeded(theme: any): void {
 	if (_themePaletteCacheTheme === theme) return; // already applied for this theme instance
 	_themePaletteCacheTheme = theme;
 
-	// Borders (top/bottom outlines, user-message frame, branch rule).
+	// Shared line colors for user-message frames and branch rules.
 	const borderMuted = safeFgAnsi(theme, "borderMuted");
 	if (borderMuted) BORDER_COLOR = borderMuted;
 
@@ -2146,30 +2173,12 @@ function lnum(n: number | null, width: number, fg = FG_LNUM): string {
 	return `${fg}${" ".repeat(Math.max(0, width - value.length))}${value}${D_RST}`;
 }
 
-function stripes(width: number): string {
-	return BG_BASE + FG_STRIPE + "╱".repeat(width) + D_RST;
-}
-
-function renderDiffStatBar(added: number, removed: number, width = termW()): string {
-	const total = added + removed;
-	if (total === 0 || width < 20) return "";
-	const slots = Math.max(8, Math.min(20, Math.floor(width / 14)));
-	let addSlots = Math.max(0, Math.min(slots, Math.round((added / total) * slots)));
-	if (added > 0 && addSlots === 0) addSlots = 1;
-	if (removed > 0 && addSlots >= slots) addSlots = slots - 1;
-	const removeSlots = Math.max(0, slots - addSlots);
-	const addBar = addSlots > 0 ? `${FG_ADD}${"━".repeat(addSlots)}${D_RST}` : "";
-	const removeBar = removeSlots > 0 ? `${FG_DEL}${"━".repeat(removeSlots)}${D_RST}` : "";
-	return `${FG_DIM}[${D_RST}${addBar}${removeBar}${FG_DIM}]${D_RST}`;
-}
-
 function summarizeDiff(added: number, removed: number): string {
 	const parts: string[] = [];
 	if (added > 0) parts.push(`${FG_ADD}+${added}${D_RST}`);
 	if (removed > 0) parts.push(`${FG_DEL}-${removed}${D_RST}`);
 	if (!parts.length) return `${FG_DIM}no changes${D_RST}`;
-	const bar = renderDiffStatBar(added, removed);
-	return bar ? `${parts.join(" ")} ${bar}` : parts.join(" ");
+	return parts.join(" ");
 }
 
 function diffSummaryWithMeta(added: number, removed: number, hunks: number, mode: string): string {
@@ -2192,33 +2201,6 @@ function collapsedDiffHint(remainingLines: number, hiddenHunks: number): string 
 		if (visibleWidth(candidate) <= width) return candidate;
 	}
 	return truncateToWidth("…", width, "");
-}
-
-function diffRule(width: number): string {
-	return `${BG_BASE}${FG_RULE}${"─".repeat(width)}${D_RST}`;
-}
-
-function shouldUseSplit(diff: ParsedDiff, tw: number, maxRows = MAX_PREVIEW_LINES): boolean {
-	if (!diff.lines.length) return false;
-	if (tw < SPLIT_MIN_WIDTH) return false;
-	const nw = Math.max(2, String(Math.max(...diff.lines.map((l) => l.oldNum ?? l.newNum ?? 0), 0)).length);
-	const half = Math.floor((tw - 1) / 2);
-	const gw = nw + 5;
-	const cw = Math.max(12, half - gw);
-	if (cw < SPLIT_MIN_CODE_WIDTH) return false;
-	const vis = diff.lines.slice(0, maxRows);
-	let contentLines = 0;
-	let wrapCandidates = 0;
-	for (const line of vis) {
-		if (line.type === "sep") continue;
-		contentLines++;
-		if (tabs(line.content).length > cw) wrapCandidates++;
-	}
-	if (contentLines === 0) return true;
-	const wrapRatio = wrapCandidates / contentLines;
-	if (wrapCandidates >= SPLIT_MAX_WRAP_LINES) return false;
-	if (wrapRatio >= SPLIT_MAX_WRAP_RATIO) return false;
-	return true;
 }
 
 const EXT_LANG: Record<string, BundledLanguage> = {
@@ -2435,7 +2417,7 @@ async function renderUnified(
 	const vis = diff.lines.slice(0, max);
 	const tw = width;
 	const nw = Math.max(2, String(Math.max(...vis.map((l) => l.oldNum ?? l.newNum ?? 0), 0)).length);
-	const gw = nw + 5;
+	const gw = nw + 3;
 	const cw = Math.max(20, tw - gw);
 	const canHL = diff.chars <= MAX_HL_CHARS && vis.length <= MAX_RENDER_LINES;
 
@@ -2452,15 +2434,13 @@ async function renderUnified(
 	let oldIndex = 0;
 	let newIndex = 0;
 	let index = 0;
-	const out: string[] = [diffRule(tw)];
+	const out: string[] = [];
 
-	function emitRow(num: number | null, sign: string, gutterBg: string, signFg: string, body: string, bodyBg = ""): void {
-		const borderFg = sign === "-" ? dc.fgDel : sign === "+" ? dc.fgAdd : "";
-		const border = borderFg ? `${borderFg}▌${D_RST}` : `${BG_BASE} `;
-		const numFg = borderFg || FG_LNUM;
-		const gutter = `${border}${gutterBg}${lnum(num, nw, numFg)}${signFg}${sign}${D_RST} ${DIVIDER} `;
-		const cont = `${border}${gutterBg}${" ".repeat(nw + 1)}${D_RST} ${DIVIDER} `;
-		const rows = wrapAnsi(tabs(body), cw, adaptiveWrapRows(), bodyBg);
+	function emitRow(num: number | null, sign: string, _gutterBg: string, signFg: string, body: string, bodyBg = ""): void {
+		const gutter = `${BG_BASE}${lnum(num, nw, FG_LNUM)} ${signFg}${sign}${D_RST} `;
+		const cont = `${BG_BASE}${" ".repeat(nw + 3)}${D_RST}`;
+		const isBlankChange = (sign === "-" || sign === "+") && diffStrip(body).trim().length === 0;
+		const rows = isBlankChange ? [""] : wrapAnsi(tabs(body), cw, adaptiveWrapRows(), bodyBg);
 		out.push(`${gutter}${rows[0]}${D_RST}`);
 		for (let r = 1; r < rows.length; r++) out.push(`${cont}${rows[r]}${D_RST}`);
 	}
@@ -2469,18 +2449,14 @@ async function renderUnified(
 		const line = vis[index];
 		if (line.type === "sep") {
 			const gap = line.newNum;
-			const label = gap && gap > 0 ? ` ${gap} unmodified lines ` : "···";
-			const totalW = Math.min(tw, 72);
-			const pad = Math.max(0, totalW - label.length - 2);
-			const half1 = Math.floor(pad / 2);
-			const half2 = pad - half1;
-			out.push(`${BG_BASE}${FG_DIM}${"─".repeat(half1)}${label}${"─".repeat(half2)}${D_RST}`);
+			const label = gap && gap > 0 ? `... ${gap} unchanged lines` : "...";
+			out.push(`${BG_BASE}${" ".repeat(nw + 1)}${FG_DIM}${label}${D_RST}`);
 			index++;
 			continue;
 		}
 		if (line.type === "ctx") {
-			const hl = oldHL[oldIndex] ?? line.content;
-			emitRow(line.newNum, " ", BG_BASE, dc.fgCtx, `${BG_BASE}${D_DIM}${hl}`, BG_BASE);
+			const text = diffStrip(oldHL[oldIndex] ?? line.content);
+			emitRow(line.newNum, " ", BG_BASE, dc.fgCtx, `${D_DIM}${text}`, BG_BASE);
 			oldIndex++;
 			newIndex++;
 			index++;
@@ -2503,8 +2479,8 @@ async function renderUnified(
 		const isPaired = dels.length === 1 && adds.length === 1;
 		const wd = isPaired ? wordDiffAnalysis(dels[0].l.content, adds[0].l.content) : null;
 		if (isPaired && wd && wd.similarity >= WORD_DIFF_MIN_SIM && canHL) {
-			emitRow(dels[0].l.oldNum, "-", BG_GUTTER_DEL, `${dc.fgDel}${D_BOLD}`, injectBg(dels[0].hl, wd.oldRanges, BG_DEL, BG_DEL_W), BG_DEL);
-			emitRow(adds[0].l.newNum, "+", BG_GUTTER_ADD, `${dc.fgAdd}${D_BOLD}`, injectBg(adds[0].hl, wd.newRanges, BG_ADD, BG_ADD_W), BG_ADD);
+			emitRow(dels[0].l.oldNum, "-", BG_GUTTER_DEL, `${dc.fgDel}${D_BOLD}`, injectBg(`${dc.fgDel}${diffStrip(dels[0].hl)}`, wd.oldRanges, BG_DEL, BG_DEL_W), BG_DEL);
+			emitRow(adds[0].l.newNum, "+", BG_GUTTER_ADD, `${dc.fgAdd}${D_BOLD}`, injectBg(`${dc.fgAdd}${diffStrip(adds[0].hl)}`, wd.newRanges, BG_ADD, BG_ADD_W), BG_ADD);
 			continue;
 		}
 		if (isPaired && wd && wd.similarity >= WORD_DIFF_MIN_SIM && !canHL) {
@@ -2513,150 +2489,22 @@ async function renderUnified(
 			emitRow(adds[0].l.newNum, "+", BG_GUTTER_ADD, `${dc.fgAdd}${D_BOLD}`, `${BG_ADD}${pwd.new}`, BG_ADD);
 			continue;
 		}
-		for (const d of dels) emitRow(d.l.oldNum, "-", BG_GUTTER_DEL, `${dc.fgDel}${D_BOLD}`, `${BG_DEL}${canHL ? d.hl : d.l.content}`, BG_DEL);
-		for (const a of adds) emitRow(a.l.newNum, "+", BG_GUTTER_ADD, `${dc.fgAdd}${D_BOLD}`, `${BG_ADD}${canHL ? a.hl : a.l.content}`, BG_ADD);
+		for (const d of dels) emitRow(d.l.oldNum, "-", BG_GUTTER_DEL, `${dc.fgDel}${D_BOLD}`, `${BG_DEL}${dc.fgDel}${diffStrip(canHL ? d.hl : d.l.content)}`, BG_DEL);
+		for (const a of adds) emitRow(a.l.newNum, "+", BG_GUTTER_ADD, `${dc.fgAdd}${D_BOLD}`, `${BG_ADD}${dc.fgAdd}${diffStrip(canHL ? a.hl : a.l.content)}`, BG_ADD);
 	}
 
-	out.push(diffRule(tw));
 	if (diff.lines.length > vis.length) out.push(`${BG_BASE}${FG_DIM}  ${collapsedDiffHint(diff.lines.length - vis.length, 0)}${D_RST}`);
 	return out.join("\n");
 }
 
-async function renderSplit(
+async function renderDiffPreview(
 	diff: ParsedDiff,
 	language: BundledLanguage | undefined,
 	max = MAX_PREVIEW_LINES,
 	dc: DiffColors = DEFAULT_DIFF_COLORS,
 	width = termW(),
 ): Promise<string> {
-	const tw = width;
-	if (!shouldUseSplit(diff, tw, max)) return renderUnified(diff, language, max, dc, width);
-	if (!diff.lines.length) return "";
-
-	type Row = { left: DiffLine | null; right: DiffLine | null };
-	const rows: Row[] = [];
-	let i = 0;
-	while (i < diff.lines.length) {
-		const line = diff.lines[i];
-		if (line.type === "sep" || line.type === "ctx") {
-			rows.push({ left: line, right: line });
-			i++;
-			continue;
-		}
-		const dels: DiffLine[] = [];
-		const adds: DiffLine[] = [];
-		while (i < diff.lines.length && diff.lines[i].type === "del") dels.push(diff.lines[i++]);
-		while (i < diff.lines.length && diff.lines[i].type === "add") adds.push(diff.lines[i++]);
-		const n = Math.max(dels.length, adds.length);
-		for (let j = 0; j < n; j++) rows.push({ left: dels[j] ?? null, right: adds[j] ?? null });
-	}
-
-	const vis = rows.slice(0, max);
-	const half = Math.floor((tw - 1) / 2);
-	const nw = Math.max(2, String(Math.max(...diff.lines.map((l) => l.oldNum ?? l.newNum ?? 0), 0)).length);
-	const gw = nw + 5;
-	const cw = Math.max(12, half - gw);
-	const canHL = diff.chars <= MAX_HL_CHARS && vis.length * 2 <= MAX_RENDER_LINES * 2;
-
-	const leftSrc: string[] = [];
-	const rightSrc: string[] = [];
-	for (const row of vis) {
-		if (row.left && row.left.type !== "sep") leftSrc.push(row.left.content);
-		if (row.right && row.right.type !== "sep") rightSrc.push(row.right.content);
-	}
-	const [leftHL, rightHL] = canHL
-		? await Promise.all([hlBlock(leftSrc.join("\n"), language), hlBlock(rightSrc.join("\n"), language)])
-		: [leftSrc, rightSrc];
-
-	let leftIndex = 0;
-	let rightIndex = 0;
-
-	type HalfResult = { gutter: string; contGutter: string; bodyRows: string[] };
-	function halfBuild(
-		line: DiffLine | null,
-		hl: string,
-		ranges: Array<[number, number]> | null,
-		side: "left" | "right",
-	): HalfResult {
-		if (!line) {
-			const gPat = FG_STRIPE + "╱".repeat(nw + 2) + D_RST;
-			const gutter = ` ${gPat}${FG_RULE}│${D_RST} `;
-			return { gutter, contGutter: gutter, bodyRows: [stripes(cw)] };
-		}
-		if (line.type === "sep") {
-			const gap = line.newNum;
-			const label = gap && gap > 0 ? `··· ${gap} lines ···` : "···";
-			const gutter = `${BG_BASE} ${FG_DIM}${fit("", nw + 2)}${D_RST}${FG_RULE}│${D_RST} `;
-			return { gutter, contGutter: gutter, bodyRows: [`${BG_BASE}${FG_DIM}${fit(label, cw)}${D_RST}`] };
-		}
-		const isDel = line.type === "del";
-		const isAdd = line.type === "add";
-		const gBg = isDel ? BG_GUTTER_DEL : isAdd ? BG_GUTTER_ADD : BG_BASE;
-		const cBg = isDel ? BG_DEL : isAdd ? BG_ADD : BG_BASE;
-		const sFg = isDel ? dc.fgDel : isAdd ? dc.fgAdd : dc.fgCtx;
-		const sign = isDel ? "-" : isAdd ? "+" : " ";
-		const num = isDel ? line.oldNum : isAdd ? line.newNum : side === "left" ? line.oldNum : line.newNum;
-		const borderFg = isDel ? dc.fgDel : isAdd ? dc.fgAdd : "";
-		const border = borderFg ? `${borderFg}▌${D_RST}` : ` ${BG_BASE}`;
-		const numFg = borderFg || FG_LNUM;
-		let body: string;
-		if (ranges && ranges.length > 0) body = injectBg(hl, ranges, cBg, isDel ? BG_DEL_W : BG_ADD_W);
-		else if (isDel || isAdd) body = `${cBg}${hl}`;
-		else body = `${BG_BASE}${D_DIM}${hl}`;
-		const gutter = `${border}${gBg}${lnum(num, nw, numFg)}${sFg}${D_BOLD}${sign}${D_RST} ${FG_RULE}│${D_RST} `;
-		const contGutter = `${border}${gBg}${" ".repeat(nw + 1)}${D_RST} ${FG_RULE}│${D_RST} `;
-		return { gutter, contGutter, bodyRows: wrapAnsi(tabs(body), cw, adaptiveWrapRows(), cBg) };
-	}
-
-	const out: string[] = [];
-	const hdrOld = `${BG_BASE}${" ".repeat(Math.max(0, nw - 2))}${dc.fgDel}${D_DIM}old${D_RST}`;
-	const hdrNew = `${BG_BASE}${" ".repeat(Math.max(0, nw - 2))}${dc.fgAdd}${D_DIM}new${D_RST}`;
-	out.push(`${BG_BASE}${hdrOld}${" ".repeat(Math.max(0, half - nw - 1))}${FG_RULE}┊${D_RST}${hdrNew}`);
-	out.push(`${diffRule(half)}${FG_RULE}┊${D_RST}${diffRule(half)}`);
-
-	for (const row of vis) {
-		const leftLine = row.left;
-		const rightLine = row.right;
-		const paired = Boolean(leftLine && rightLine && leftLine.type === "del" && rightLine.type === "add");
-		const wd = paired && leftLine && rightLine ? wordDiffAnalysis(leftLine.content, rightLine.content) : null;
-		let leftResult: HalfResult;
-		let rightResult: HalfResult;
-		if (paired && wd && leftLine && rightLine && wd.similarity >= WORD_DIFF_MIN_SIM && canHL) {
-			leftResult = halfBuild(leftLine, leftHL[leftIndex++] ?? leftLine.content, wd.oldRanges, "left");
-			rightResult = halfBuild(rightLine, rightHL[rightIndex++] ?? rightLine.content, wd.newRanges, "right");
-		} else if (paired && wd && leftLine && rightLine && wd.similarity >= WORD_DIFF_MIN_SIM && !canHL) {
-			const pwd = plainWordDiff(leftLine.content, rightLine.content);
-			leftIndex++;
-			rightIndex++;
-			leftResult = halfBuild(leftLine, pwd.old, null, "left");
-			rightResult = halfBuild(rightLine, pwd.new, null, "right");
-		} else {
-			leftResult = halfBuild(
-				row.left,
-				row.left && row.left.type !== "sep" ? (leftHL[leftIndex++] ?? row.left.content) : "",
-				null,
-				"left",
-			);
-			rightResult = halfBuild(
-				row.right,
-				row.right && row.right.type !== "sep" ? (rightHL[rightIndex++] ?? row.right.content) : "",
-				null,
-				"right",
-			);
-		}
-		const maxRows = Math.max(leftResult.bodyRows.length, rightResult.bodyRows.length);
-		for (let rowIndex = 0; rowIndex < maxRows; rowIndex++) {
-			const lg = rowIndex === 0 ? leftResult.gutter : leftResult.contGutter;
-			const rg = rowIndex === 0 ? rightResult.gutter : rightResult.contGutter;
-			const lb = leftResult.bodyRows[rowIndex] ?? (!row.left ? stripes(cw) : `${BG_EMPTY}${" ".repeat(cw)}${D_RST}`);
-			const rb = rightResult.bodyRows[rowIndex] ?? (!row.right ? stripes(cw) : `${BG_EMPTY}${" ".repeat(cw)}${D_RST}`);
-			out.push(`${lg}${lb}${DIVIDER}${rg}${rb}`);
-		}
-	}
-
-	out.push(`${diffRule(half)}${FG_RULE}┊${D_RST}${diffRule(half)}`);
-	if (rows.length > vis.length) out.push(`${BG_BASE}${FG_DIM}  ${collapsedDiffHint(rows.length - vis.length, 0)}${D_RST}`);
-	return out.join("\n");
+	return renderUnified(diff, language, max, dc, width);
 }
 
 function getEditOperations(input: any): Array<{ oldText: string; newText: string }> {
@@ -2834,17 +2682,17 @@ function renderEditPreviewBody(
 	if (operations.length === 1) {
 		const [diff] = diffs;
 		const line = lines[0] ?? getFirstChangedNewLine(diff);
-		renderSplit(diff, language, ctx.expanded ? MAX_PREVIEW_LINES : 32, dc, branchWidth)
+		renderDiffPreview(diff, language, ctx.expanded ? MAX_PREVIEW_LINES : 32, dc, branchWidth)
 			.then((rendered) => {
 				if (ctx.state._pk !== key) return;
 				ctx.state._ptBody = `${summarizeDiff(diff.added, diff.removed)}${formatLineMeta(line, theme)}\n${rendered}`;
-				ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme, false, true));
+				ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme));
 				ctx.invalidate();
 			})
 			.catch(() => {
 				if (ctx.state._pk !== key) return;
 				ctx.state._ptBody = `${summarizeDiff(diff.added, diff.removed)}${formatLineMeta(line, theme)}`;
-				ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme, false, true));
+				ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme));
 				ctx.invalidate();
 			});
 		return;
@@ -2856,7 +2704,7 @@ function renderEditPreviewBody(
 	Promise.all(
 		diffs.slice(0, maxShown).map((diff, index) => {
 			const line = lines[index] ?? getFirstChangedNewLine(diff);
-			return renderSplit(diff, language, previewLines, dc, branchWidth)
+			return renderDiffPreview(diff, language, previewLines, dc, branchWidth)
 				.then((rendered) => `Edit ${index + 1}/${operations.length}${formatLineMeta(line, theme)}\n${rendered}`)
 				.catch(() => `Edit ${index + 1}/${operations.length}${formatLineMeta(line, theme)} ${summarizeDiff(diff.added, diff.removed)}`);
 		}),
@@ -2868,13 +2716,13 @@ function renderEditPreviewBody(
 				? `\n${theme.fg("muted", `… ${remainder} more edit blocks${ctx.expanded ? "" : " • Ctrl+O to expand"}`)}`
 				: "";
 			ctx.state._ptBody = `${operations.length} edits ${summary}\n\n${sections.join("\n\n")}${suffix}`;
-			ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme, false, true));
+			ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme));
 			ctx.invalidate();
 		})
 		.catch(() => {
 			if (ctx.state._pk !== key) return;
 			ctx.state._ptBody = `${operations.length} edits ${summary}`;
-			ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme, false, true));
+			ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme));
 			ctx.invalidate();
 		});
 }
@@ -3573,21 +3421,21 @@ function renderApplyPatchCall(args: any, theme: Theme, ctx: any, sp: (path: stri
 	if (ctx.state._applyPatchPreviewKey !== key) {
 		ctx.state._applyPatchPreviewKey = key;
 		ctx.state._applyPatchPreviewBody = theme.fg("muted", "(rendering…)");
-		ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme, false, true);
+	ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme);
 		const dc = resolveDiffColors(theme);
 		if (preview.changes.length === 1) {
 			const [change] = preview.changes;
-			renderSplit(change.diff, change.language, ctx.expanded ? MAX_PREVIEW_LINES : 32, dc, diffWidth)
+			renderDiffPreview(change.diff, change.language, ctx.expanded ? MAX_PREVIEW_LINES : 32, dc, diffWidth)
 				.then((rendered) => {
 					if (ctx.state._applyPatchPreviewKey !== key) return;
 					ctx.state._applyPatchPreviewBody = `${describeApplyPatchChange(change)} ${change.summary}${formatApplyPatchLine(change, theme)}\n${rendered}`;
-					ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme, false, true);
+				ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme);
 					ctx.invalidate();
 				})
 				.catch(() => {
 					if (ctx.state._applyPatchPreviewKey !== key) return;
 					ctx.state._applyPatchPreviewBody = `${describeApplyPatchChange(change)} ${change.summary}${formatApplyPatchLine(change, theme)}`;
-					ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme, false, true);
+				ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme);
 					ctx.invalidate();
 				});
 		} else {
@@ -3597,7 +3445,7 @@ function renderApplyPatchCall(args: any, theme: Theme, ctx: any, sp: (path: stri
 				: Math.max(8, Math.floor(MAX_PREVIEW_LINES / Math.max(1, maxShown)));
 			Promise.all(
 				preview.changes.slice(0, maxShown).map((change, index) =>
-					renderSplit(change.diff, change.language, previewLines, dc, diffWidth)
+				renderDiffPreview(change.diff, change.language, previewLines, dc, diffWidth)
 						.then((rendered) => `${describeApplyPatchChange(change)} ${change.summary}${formatApplyPatchLine(change, theme)}\n${rendered}`)
 						.catch(() => `${index + 1}. ${describeApplyPatchChange(change)} ${change.summary}${formatApplyPatchLine(change, theme)}`),
 				),
@@ -3610,13 +3458,13 @@ function renderApplyPatchCall(args: any, theme: Theme, ctx: any, sp: (path: stri
 						: "";
 					const summary = `${preview.changes.length} files ${preview.summary}`;
 					ctx.state._applyPatchPreviewBody = `${summary}\n\n${sections.join("\n\n")}${suffix}`;
-					ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme, false, true);
+					ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme);
 					ctx.invalidate();
 				})
 				.catch(() => {
 					if (ctx.state._applyPatchPreviewKey !== key) return;
 					ctx.state._applyPatchPreviewBody = `${preview.changes.length} files ${preview.summary}`;
-					ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme, false, true);
+					ctx.state._applyPatchPreviewDisplay = withBranch(ctx.state._applyPatchPreviewBody, theme);
 					ctx.invalidate();
 				});
 		}
@@ -3961,15 +3809,17 @@ export default function (pi: ExtensionAPI) {
 	patchGlobalToolBorders();
 	patchCustomMessageRender();
 	patchUserMessageRender();
+	patchEditorRender();
 	patchAssistantMessages();
 	patchToolExecutionRenderers();
 	applyDiffPalette();
 	registerThinkingLabels(pi);
 
-	// /cc-tools command — toggle tool border style at runtime
+	// /cc-tools command — toggle tool display style at runtime.
+	// "outlines" is kept as a backward-compatible alias for transparent.
 	const TOOL_MODES = ["outlines", "transparent", "default"] as const;
 	pi.registerCommand("cc-tools", {
-		description: "Switch tool display style: outlines (lines around tools), transparent (no chrome), default (pi built-in backgrounds)",
+		description: "Switch tool display style: transparent (no chrome), default (pi built-in backgrounds)",
 		getArgumentCompletions(prefix) {
 			return TOOL_MODES
 				.filter((m) => m.startsWith(prefix))
@@ -3977,7 +3827,7 @@ export default function (pi: ExtensionAPI) {
 					value: m,
 					label: m,
 					description:
-						m === "outlines" ? "Horizontal rules around each tool (default)"
+						m === "outlines" ? "Legacy alias for transparent"
 						: m === "transparent" ? "No borders or backgrounds"
 						: "Pi built-in tool backgrounds",
 				}));
@@ -4448,17 +4298,16 @@ export default function (pi: ExtensionAPI) {
 				const previewLines = ctx.expanded ? MAX_RENDER_LINES : diffCollapsedLimit();
 				const hunks = d.diff?.lines?.filter((l: any) => l.type === "sep").length + (d.diff?.lines?.length ? 1 : 0);
 				const diffWidth = branchDiffWidth();
-				const mode = shouldUseSplit(d.diff, diffWidth, previewLines) ? "split" : "unified";
-				const richSummary = diffSummaryWithMeta(d.diff.added, d.diff.removed, hunks, mode);
+				const richSummary = diffSummaryWithMeta(d.diff.added, d.diff.removed, hunks, "");
 				const key = `wd:${diffWidth}:${d.summary}:${d.diff?.lines?.length ?? 0}:${d.language ?? ""}:${ctx.expanded ? 1 : 0}`;
 				if (ctx.state._wdk !== key) {
 					ctx.state._wdk = key;
-					ctx.state._wdt = withFinalBranchBlock(`${richSummary}\n${theme.fg("muted", "rendering diff…")}`, theme);
+					ctx.state._wdt = withBranch(`${richSummary}\n${theme.fg("muted", "rendering diff…")}`, theme);
 					const dc = resolveDiffColors(theme);
-					renderSplit(d.diff, d.language, previewLines, dc, diffWidth)
+					renderDiffPreview(d.diff, d.language, previewLines, dc, diffWidth)
 						.then((rendered) => {
 							if (ctx.state._wdk !== key) return;
-							ctx.state._wdt = withFinalBranchBlock(`${richSummary}\n${rendered}`, theme);
+							ctx.state._wdt = withBranch(`${richSummary}\n${rendered}`, theme);
 							ctx.invalidate();
 						})
 						.catch(() => {
@@ -4481,12 +4330,12 @@ export default function (pi: ExtensionAPI) {
 				const pk = `nf:${d.filePath}:${contentHash}:${diffWidth}:${ctx.expanded ? 1 : 0}`;
 				if (ctx.state._nfk !== pk) {
 					ctx.state._nfk = pk;
-					ctx.state._nft = withFinalBranchBlock(`${richSummary}\n${theme.fg("muted", "rendering diff…")}`, theme);
+					ctx.state._nft = withBranch(`${richSummary}\n${theme.fg("muted", "rendering diff…")}`, theme);
 					const dc = resolveDiffColors(theme);
 					renderUnified(syntheticDiff, lang(d.filePath), previewLines, dc, diffWidth)
 						.then((rendered) => {
 							if (ctx.state._nfk !== pk) return;
-							ctx.state._nft = withFinalBranchBlock(`${richSummary}\n${rendered}`, theme);
+							ctx.state._nft = withBranch(`${richSummary}\n${rendered}`, theme);
 							ctx.invalidate();
 						})
 						.catch(() => {
@@ -4556,7 +4405,7 @@ export default function (pi: ExtensionAPI) {
 			if (ctx.state._pk !== key) {
 				ctx.state._pk = key;
 				ctx.state._ptBody = theme.fg("muted", "(rendering…)");
-				ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme, false, true));
+				ctx.state._ptDisplay = indentBranchBlock(withBranch(ctx.state._ptBody, theme));
 				const lg = lang(fp);
 				void computeLocalizedEditDiffs(fp, operations, cwd)
 					.then((localizedDiffs) => {
@@ -4588,15 +4437,10 @@ export default function (pi: ExtensionAPI) {
 				return makeText(ctx.lastComponent, indentBranchBlock(withBranch(theme.fg("error", e), theme)));
 			}
 			if ((result as any).details?._type === "editInfo") {
-				const { editLine, hunks, added, removed } = (result as any).details;
-				const loc = formatLineMeta(editLine ?? 0, theme);
-				const summary = diffSummaryWithMeta(added ?? 0, removed ?? 0, hunks ?? 0, "");
-				return makeText(ctx.lastComponent, indentBranchBlock(withBranch(`${summary}${loc}`, theme)));
+				return makeText(ctx.lastComponent, "");
 			}
 			if ((result as any).details?._type === "multiEditInfo") {
-				const { editCount, diffLineCount, hunks, totalAdded, totalRemoved } = (result as any).details;
-				const summary = diffSummaryWithMeta(totalAdded ?? 0, totalRemoved ?? 0, hunks ?? 0, "");
-				return makeText(ctx.lastComponent, indentBranchBlock(withBranch(`${editCount} edits ${summary}${typeof diffLineCount === "number" ? ` ${theme.fg("muted", `(${diffLineCount} diff lines)`)}` : ""}`, theme)));
+				return makeText(ctx.lastComponent, "");
 			}
 			return makeText(ctx.lastComponent, indentBranchBlock(withBranch(theme.fg("success", "Applied"), theme)));
 		},

@@ -16,10 +16,10 @@ Claude Code inspired tool rendering for Pi — Shiki-powered diffs, status dots,
 - **Live running previews** that show a few output lines for active tool calls (latest lines for bash), persisting until the next tool/text activity
 - **Subagent completion notifications** restyled to match the same Claude-style tool rows
 - **RTK rewrite integration** that folds rewrite notices into the bash tool row with a muted `(RTK)` badge and expanded-only rewrite details
-- **Transparent tool backgrounds** in `transparent` or `border` mode
-- **Theme-adaptive palette** — borders, branch connectors, dim text, spinner accent, and diff backgrounds automatically follow the active pi theme (set `themeAdaptive: false` to keep the fixed Claude-style palette)
+- **Transparent tool backgrounds** in `transparent` mode
+- **Theme-adaptive palette** — branch connectors, dim text, spinner accent, and diff backgrounds automatically follow the active pi theme (set `themeAdaptive: false` to keep the fixed Claude-style palette)
 - **Transparent edit/write diffs** with universal red/green diff colors
-- **Global border patch** for all tool rows, including unknown/custom tools
+- **Global transparent chrome patch** for all tool rows, including unknown/custom tools
 
 ## Configuration
 
@@ -27,7 +27,7 @@ Set in `.pi/settings.json` or `~/.pi/settings.json`:
 
 ```json
 {
-  "toolBackground": "border",
+  "toolBackground": "transparent",
   "readOutputMode": "preview",
   "searchOutputMode": "preview",
   "mcpOutputMode": "preview",
@@ -48,7 +48,6 @@ When `themeAdaptive` is `true` (default), the following colors are derived from 
 
 | Element | Derived from |
 |---------|--------------|
-| Tool outline borders (top/bottom rules) | `borderMuted` |
 | Branch connectors (`├─`, `└─`, `│`) | `dim` (fallback: `muted`) |
 | "✻ Worked for Ns" line | `muted` |
 | Thinking-block italic gray | `muted` |
@@ -92,7 +91,7 @@ The selection is persisted as `spinnerVerbColor` / `spinnerStatusColor` in `~/.p
 |-------|----------|
 | `default` | Standard Pi tool backgrounds |
 | `transparent` | Transparent tool backgrounds |
-| `border` | Transparent backgrounds with top/bottom border lines |
+| `border` / `outlines` | Legacy aliases for `transparent` |
 
 ### Output modes
 
@@ -135,7 +134,7 @@ This package targets recent Pi versions where tool renderers use:
 - `renderCall(args, theme, context)`
 - `renderResult(result, { expanded, isPartial }, theme, context)`
 
-Unknown/custom tools do not have a public global renderer hook in Pi, so this package patches container rendering to add top/bottom borders for all tool executions in border mode.
+Unknown/custom tools do not have a public global renderer hook in Pi, so this package patches container rendering to keep custom tool rows visually consistent with the built-in transparent rendering.
 
 ## Credits
 
