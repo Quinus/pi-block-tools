@@ -3958,7 +3958,7 @@ function formatTaskStatus(status: string, theme: Theme): string {
 
 function formatOpenAiSuccessLine(name: string, line: string, theme: Theme): string {
 	const trimmed = line.trim();
-	if (!trimmed) return theme.fg("success", "Done");
+	if (!trimmed) return theme.fg("muted", "Done");
 
 	if (name === "TaskCreate") {
 		const match = trimmed.match(/^Task #(\d+) created successfully: (.+)$/);
@@ -4046,7 +4046,7 @@ function getReadImageFallback(result: any, ctx: any): string {
 function renderReadImageResult(result: any, expanded: boolean, theme: Theme, ctx: any): Text {
 	const image = getFirstImageBlock(result);
 	const mimeType = image?.mimeType ?? "image";
-	const summary = `${theme.fg("success", "Image loaded")} ${theme.fg("muted", `[${mimeType}]`)}`;
+	const summary = `${theme.fg("muted", "Image loaded")} ${theme.fg("muted", `[${mimeType}]`)}`;
 	if (!expanded) {
 		return makeText(ctx.lastComponent, withBranch(`${summary}${theme.fg("muted", " • Ctrl+O to show")}`, theme));
 	}
@@ -4505,7 +4505,7 @@ export default function (pi: ExtensionAPI) {
 			}
 			const exitMatch = output.match(/exit code: (\d+)/);
 			const exitCode = exitMatch ? Number.parseInt(exitMatch[1], 10) : null;
-			let text = exitCode === null || exitCode === 0 ? theme.fg("success", "Done") : theme.fg("error", `Exit ${exitCode}`);
+			let text = exitCode === null || exitCode === 0 ? theme.fg("muted", "Done") : theme.fg("error", `Exit ${exitCode}`);
 			text += theme.fg("muted", ` (${nonEmpty.length} lines)`);
 			if (details?.truncation?.truncated) text += theme.fg("warning", " [truncated]");
 			const persistentPreview = shouldPreserveBashPreview(ctx) ? buildPersistentBashPreview(nonEmpty, theme) : "";
