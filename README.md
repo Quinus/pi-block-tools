@@ -1,6 +1,6 @@
-# pi-claude-style-tools
+# pi-block-tools
 
-Claude Code inspired tool rendering for Pi — Shiki-powered diffs, status dots, branch connectors, file icons, and configurable output modes.
+Block-styled Claude Code inspired tool rendering for Pi — Shiki-powered diffs, status dots, branch connectors, file icons, and configurable output modes.
 
 ## Features
 
@@ -143,3 +143,8 @@ This project builds upon and was inspired by the excellent work of:
 - **[@heyhuynhgiabuu/pi-pretty](https://github.com/buddingnewinsights/pi-pretty)** by [huynhgiabuu](https://github.com/buddingnewinsights) — Pretty terminal output with syntax-highlighted file reads, colored bash output, and tree-view directory listings
 - **[@heyhuynhgiabuu/pi-diff](https://github.com/buddingnewinsights/pi-diff)** by [huynhgiabuu](https://github.com/buddingnewinsights) — Shiki-powered terminal diff renderer with word-level diffs in split and unified views
 - **[pi-tool-display](https://github.com/MasuRii/pi-tool-display)** by [MasuRii](https://github.com/MasuRii) — Compact tool call rendering, diff visualization, and output truncation
+
+
+## Fork
+
+This repository is a Quinus fork of [`@viniraioli/pi-claude-style-tools`](https://pi.dev/packages/@viniraioli/pi-claude-style-tools) / [`viniraioli/pi-cc-tools`](https://github.com/viniraioli/pi-cc-tools).

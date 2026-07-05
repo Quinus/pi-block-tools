@@ -1,7 +1,7 @@
 {
-  "name": "@viniraioli/pi-claude-style-tools",
+  "name": "pi-block-tools",
   "version": "1.0.61",
-  "description": "Claude Code-style tool rows for pi with Ctrl+O image previews and consistent built-in, MCP, and custom tool rendering",
+  "description": "Block-styled Claude Code-inspired tool rendering for pi",
   "keywords": [
     "pi-package",
     "pi-extension",
@@ -14,14 +14,14 @@
     "diff"
   ],
   "license": "MIT",
-  "author": "FammasMaz",
+  "author": "Quinus",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/FammasMaz/pi-cc-tools.git"
+    "url": "git+https://github.com/Quinus/pi-block-tools.git"
   },
-  "homepage": "https://github.com/FammasMaz/pi-cc-tools#readme",
+  "homepage": "https://github.com/Quinus/pi-block-tools#readme",
   "bugs": {
-    "url": "https://github.com/FammasMaz/pi-cc-tools/issues"
+    "url": "https://github.com/Quinus/pi-block-tools/issues"
   },
   "files": [
     "extensions/index.ts",
