@@ -88,8 +88,9 @@ const BLOCK_RED_FG = blockFg(BLOCK_COLORS.red);
 const BLOCK_MUTED_FG = blockFg(BLOCK_COLORS.gray);
 const BLOCK_DARKER_FG = blockFg(BLOCK_COLORS.darker);
 const BLOCK_ROW_BG = BLOCK_DARK_BG;
-const BLOCK_BLUE_BG = blockBg(BLOCK_COLORS.blue);
-const BLOCK_RESET = `\x1b[0m${BLOCK_ROW_BG}`;
+const BLOCK_HEADER_BG = blockBg(BLOCK_COLORS.gray);
+const BLOCK_BODY_BG = blockBg(BLOCK_COLORS.darker);
+const BLOCK_USER_BG = blockBg(BLOCK_COLORS.darkgray);
 
 // Border / branch rule colors. Defaults match the previous hardcoded values
 // so behavior is identical when the theme is unavailable or themeAdaptive=false.
@@ -505,10 +506,10 @@ function setThemeBg(theme: unknown, key: string, value: string): void {
 function applyToolBackgroundMode(theme: unknown): void {
 	syncToolBackgroundMode();
 	if (toolBackgroundMode === "block") {
-		setThemeBg(theme, "userMessageBg", BLOCK_ROW_BG);
-		setThemeBg(theme, "toolPendingBg", BLOCK_ROW_BG);
-		setThemeBg(theme, "toolSuccessBg", BLOCK_ROW_BG);
-		setThemeBg(theme, "toolErrorBg", BLOCK_ROW_BG);
+		setThemeBg(theme, "userMessageBg", BLOCK_USER_BG);
+		setThemeBg(theme, "toolPendingBg", BLOCK_BODY_BG);
+		setThemeBg(theme, "toolSuccessBg", BLOCK_BODY_BG);
+		setThemeBg(theme, "toolErrorBg", BLOCK_BODY_BG);
 		return;
 	}
 	setThemeBg(theme, "userMessageBg", TRANSPARENT_BG);
@@ -669,22 +670,37 @@ function patchGlobalToolBorders(): void {
 		const indentTool = shouldIndentToolExecution(this);
 		let result: string[];
 		if (toolBackgroundMode === "block") {
-			// Block mode: render tool rows as solid dark blocks matching pi-block-style.
-			// Strip transparent bg escapes and re-apply row bg after every ANSI reset
-			// so the background fill covers the entire line.
-			const bg = BLOCK_ROW_BG;
-			const core = textLines.map((line) => {
-				const normalized = normalizeLeadingCheckGlyph(line);
-				const text = clampLineWidth(indentTool && normalized ? ` ${normalized}` : normalized, width);
+			// Block mode: render tool rows in the pi-homescreen-block style.
+			// First line = title block (gray bg #5c6370, bold dark text).
+			// Remaining lines = detail block (darker bg #21252B, light text).
+			// Branch connectors (├─ └─ │) are stripped from detail lines.
+			const blocks: string[] = [];
+			for (const rawLine of textLines) {
+				if (isBlankLine(rawLine)) continue;
+				const isHeader = blocks.length === 0;
+				const bg = isHeader ? BLOCK_HEADER_BG : BLOCK_BODY_BG;
+				const normalized = normalizeLeadingCheckGlyph(rawLine);
+				let text = clampLineWidth(indentTool && normalized ? ` ${normalized}` : normalized, width);
+				if (!isHeader) {
+					// Strip branch connector prefix: ANSI + branch char + reset + spaces + 
+					const wrapIdx = text.indexOf("\uE000");
+					if (wrapIdx >= 0) {
+						const beforeWrap = text.slice(0, wrapIdx);
+						const afterWrap = text.slice(wrapIdx + 1);
+						const strippedBefore = beforeWrap.replace(/^[\s\x1b\[0-9;m├└─│]*/, "");
+						text = strippedBefore + afterWrap;
+					}
+				}
 				const safe = text
 					.replace(/\x1b\[49m/g, "")
 					.replace(/\x1b\[0m/g, (m) => `${m}${bg}`);
-				const plainLen = visibleWidth(stripAnsi(line));
+				const plainLen = visibleWidth(stripAnsi(safe));
 				const padding = plainLen < width ? " ".repeat(width - plainLen) : "";
-				return `${bg}${safe}${padding}\x1b[0m`;
-			});
-			const spacer = `${bg}${" ".repeat(width)}\x1b[0m`;
-			result = [spacer, ...core, spacer, ...imageLines];
+				blocks.push(`${bg}${safe}${padding}\x1b[0m`);
+			}
+			const headerSpacer = `${BLOCK_HEADER_BG}${" ".repeat(width)}\x1b[0m`;
+			const bodySpacer = `${BLOCK_BODY_BG}${" ".repeat(width)}\x1b[0m`;
+			result = [headerSpacer, ...blocks, bodySpacer, ...imageLines];
 		} else {
 			const core = textLines.map((line) => {
 				const normalized = normalizeLeadingCheckGlyph(line);
@@ -999,17 +1015,32 @@ function frameToolLikeLines(lines: string[], width: number): string[] {
 	const core = trimRenderedBlankLines(lines).map((line) => clampLineWidth(line, safeWidth));
 	if (core.length === 0 || toolBackgroundMode === "default") return core;
 	if (toolBackgroundMode === "block") {
-		const bg = BLOCK_ROW_BG;
-		const filled = core.map((line) => {
-			const safe = line
+		const blocks: string[] = [];
+		for (const line of core) {
+			if (isBlankLine(line)) continue;
+			const isHeader = blocks.length === 0;
+			const bg = isHeader ? BLOCK_HEADER_BG : BLOCK_BODY_BG;
+			// Strip branch connector prefix
+			let text = line;
+			if (!isHeader) {
+				const wrapIdx = text.indexOf("\uE000");
+				if (wrapIdx >= 0) {
+					const beforeWrap = text.slice(0, wrapIdx);
+					const afterWrap = text.slice(wrapIdx + 1);
+					const strippedBefore = beforeWrap.replace(/^[\s\x1b\[0-9;m├└─│]*/, "");
+					text = strippedBefore + afterWrap;
+				}
+			}
+			const safe = text
 				.replace(/\x1b\[49m/g, "")
 				.replace(/\x1b\[0m/g, (m) => `${m}${bg}`);
-			const plainLen = visibleWidth(stripAnsi(line));
+			const plainLen = visibleWidth(stripAnsi(safe));
 			const padding = plainLen < safeWidth ? " ".repeat(safeWidth - plainLen) : "";
-			return `${bg}${safe}${padding}\x1b[0m`;
-		});
-		const spacer = `${bg}${" ".repeat(safeWidth)}\x1b[0m`;
-		return [spacer, ...filled];
+			blocks.push(`${bg}${safe}${padding}\x1b[0m`);
+		}
+		const headerSpacer = `${BLOCK_HEADER_BG}${" ".repeat(safeWidth)}\x1b[0m`;
+		const bodySpacer = `${BLOCK_BODY_BG}${" ".repeat(safeWidth)}\x1b[0m`;
+		return [headerSpacer, ...blocks, bodySpacer];
 	}
 	const spacerLine = " ".repeat(safeWidth);
 	return [spacerLine, ...core];
@@ -1135,7 +1166,7 @@ function promptEditorBorder(line: string, width: number): string {
 	const plain = line.replace(ANSI_RE, "");
 	const indicator = plain.includes("↑") || plain.includes("↓") ? clampLineWidth(plain, width) : "";
 	const text = indicator ? indicator + "─".repeat(Math.max(0, width - visibleWidth(indicator))) : "─".repeat(Math.max(0, width));
-	const bg = toolBackgroundMode === "block" ? BLOCK_ROW_BG : TRANSPARENT_BG;
+	const bg = toolBackgroundMode === "block" ? BLOCK_BODY_BG : TRANSPARENT_BG;
 	return `${INPUT_PROMPT_FG}${text}\x1b[0m${bg}`;
 }
 
@@ -1149,7 +1180,7 @@ function promptEditorContentLine(line: string, width: number, firstLine: boolean
 	const contentWidth = Math.max(0, width - visibleWidth(prefix));
 	const content = clampLineWidth(line, contentWidth);
 	const padding = " ".repeat(Math.max(0, contentWidth - visibleWidth(content)));
-	const bg = toolBackgroundMode === "block" ? BLOCK_ROW_BG : TRANSPARENT_BG;
+	const bg = toolBackgroundMode === "block" ? BLOCK_BODY_BG : TRANSPARENT_BG;
 	return `${INPUT_ARROW_FG}${prefix}\x1b[0m${bg}${content}${padding}\x1b[0m`;
 }
 

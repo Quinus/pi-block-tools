@@ -16,12 +16,23 @@ Block-styled Claude Code inspired tool rendering for Pi — Shiki-powered diffs,
 - **Live running previews** that show a few output lines for active tool calls (latest lines for bash), persisting until the next tool/text activity
 - **Subagent completion notifications** restyled to match the same Claude-style tool rows
 - **RTK rewrite integration** that folds rewrite notices into the bash tool row with a muted `(RTK)` badge and expanded-only rewrite details
-- **Block-style tool rendering** — each tool row is rendered as a solid dark block (`#3e4451`), matching the pi-block-style statusbar aesthetic
-- **Block-mode backgrounds** for user messages, editor, and tool rows — consistent dark-gray fill everywhere
-- **pi-block-style palette** — branch connectors, user prompts, spinner text, and diff accents use the same Atom One Dark colors as `pi-block-style`
+- **Homescreen-style block rendering** — each tool call renders as a two-part block: a gray header (`#5c6370`) with the tool name, and a darker detail block (`#21252B`) with the tool's args and results
+- **No branch connectors** — content is indented naturally inside the detail block
+- **Block-mode backgrounds** for user messages (`#3e4451`) and editor (`#21252B`)
+- **pi-block-style palette** — spinner text and diff accents use the same Atom One Dark colors as `pi-block-style`
 - **Theme-adaptive palette** — branch connectors, dim text, spinner accent, and diff backgrounds can still follow the active pi theme (set `themeAdaptive: true` to enable)
 - **Transparent edit/write diffs** with Atom One Dark green/red diff colors
 - **Global transparent chrome patch** for all tool rows, including unknown/custom tools
+
+### Example rendering
+
+```
+┌──────────────────────────────────┐  ← gray spacer (#5c6370)
+│ ● Bash                           │  ← gray header (#5c6370)
+│   npm install                    │  ← darker detail (#21252B)
+│   Done (42 lines)                │
+└──────────────────────────────────┘  ← darker spacer (#21252B)
+```
 
 ## Configuration
 
@@ -91,7 +102,7 @@ The selection is persisted as `spinnerVerbColor` / `spinnerStatusColor` in `~/.p
 
 | Value | Behavior |
 |-------|----------|
-| `block` | **Default.** Solid dark block backgrounds matching pi-block-style |
+| `block` | **Default.** Two-part block: gray header + darker detail block (pi-homescreen-block style) |
 | `transparent` | Transparent tool backgrounds (no fills) |
 | `default` | Standard Pi tool backgrounds |
 | `border` / `outlines` | Legacy aliases for `transparent` |
