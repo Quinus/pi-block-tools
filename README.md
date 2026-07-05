@@ -4,8 +4,8 @@ Block-styled Claude Code inspired tool rendering for Pi — Shiki-powered diffs,
 
 ## Features
 
-- **Compact built-in tool rendering** for `read`, `bash`, `grep`, `find`, `ls`, `edit`, and `write`
-- **Claude-style OpenAI tool rendering** for `apply_patch` plus common Pi/OpenAI-style tools like `webfetch`, `web_search`, `fetch_content`, task tools, and context tools
+- **Block-style built-in tool rendering** for `read`, `bash`, `grep`, `find`, `ls`, `edit`, and `write` — each rendered as a solid dark block
+- **Block-style OpenAI tool rendering** for `apply_patch` plus common Pi/OpenAI-style tools like `webfetch`, `web_search`, `fetch_content`, task tools, and context tools
 - **`apply_patch` diff previews** that render parsed file patches in the call phase, similar to `edit`/`write`
 - **Adaptive edit/write diffs** with split or unified layouts, syntax highlighting, and inline word-level emphasis
 - **Diff stat bar** with colored add/remove summary and hunk metadata
@@ -16,9 +16,10 @@ Block-styled Claude Code inspired tool rendering for Pi — Shiki-powered diffs,
 - **Live running previews** that show a few output lines for active tool calls (latest lines for bash), persisting until the next tool/text activity
 - **Subagent completion notifications** restyled to match the same Claude-style tool rows
 - **RTK rewrite integration** that folds rewrite notices into the bash tool row with a muted `(RTK)` badge and expanded-only rewrite details
-- **Transparent tool backgrounds** in `transparent` mode
+- **Block-style tool rendering** — each tool row is rendered as a solid dark block (`#3e4451`), matching the pi-block-style statusbar aesthetic
+- **Block-mode backgrounds** for user messages, editor, and tool rows — consistent dark-gray fill everywhere
 - **pi-block-style palette** — branch connectors, user prompts, spinner text, and diff accents use the same Atom One Dark colors as `pi-block-style`
-- **Theme-adaptive palette** — branch connectors, dim text, spinner accent, and diff backgrounds can still follow the active pi theme (set `themeAdaptive: false` to keep the fixed block-style palette)
+- **Theme-adaptive palette** — branch connectors, dim text, spinner accent, and diff backgrounds can still follow the active pi theme (set `themeAdaptive: true` to enable)
 - **Transparent edit/write diffs** with Atom One Dark green/red diff colors
 - **Global transparent chrome patch** for all tool rows, including unknown/custom tools
 
@@ -28,7 +29,7 @@ Set in `.pi/settings.json` or `~/.pi/settings.json`:
 
 ```json
 {
-  "toolBackground": "transparent",
+  "toolBackground": "block",
   "readOutputMode": "preview",
   "searchOutputMode": "preview",
   "mcpOutputMode": "preview",
@@ -90,8 +91,9 @@ The selection is persisted as `spinnerVerbColor` / `spinnerStatusColor` in `~/.p
 
 | Value | Behavior |
 |-------|----------|
+| `block` | **Default.** Solid dark block backgrounds matching pi-block-style |
+| `transparent` | Transparent tool backgrounds (no fills) |
 | `default` | Standard Pi tool backgrounds |
-| `transparent` | Transparent tool backgrounds |
 | `border` / `outlines` | Legacy aliases for `transparent` |
 
 ### Output modes

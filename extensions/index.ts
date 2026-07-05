@@ -87,6 +87,9 @@ const BLOCK_GREEN_FG = blockFg(BLOCK_COLORS.green);
 const BLOCK_RED_FG = blockFg(BLOCK_COLORS.red);
 const BLOCK_MUTED_FG = blockFg(BLOCK_COLORS.gray);
 const BLOCK_DARKER_FG = blockFg(BLOCK_COLORS.darker);
+const BLOCK_ROW_BG = BLOCK_DARK_BG;
+const BLOCK_BLUE_BG = blockBg(BLOCK_COLORS.blue);
+const BLOCK_RESET = `\x1b[0m${BLOCK_ROW_BG}`;
 
 // Border / branch rule colors. Defaults match the previous hardcoded values
 // so behavior is identical when the theme is unavailable or themeAdaptive=false.
@@ -106,10 +109,10 @@ const WRAP_MARK = "\uE000";
 const KITTY_IMAGE_PREFIX = "\x1b_G";
 const ITERM2_IMAGE_PREFIX = "\x1b]1337;File=";
 
-let toolBackgroundMode: "default" | "transparent" | "outlines" = "transparent";
+let toolBackgroundMode: "default" | "transparent" | "outlines" | "block" = "block";
 
 interface SettingsFile {
-	toolBackground?: "default" | "transparent" | "outlines" | "border";
+	toolBackground?: "default" | "transparent" | "outlines" | "border" | "block";
 	hiddenFooterStatusKeys?: string[];
 	readOutputMode?: "hidden" | "summary" | "preview";
 	searchOutputMode?: "hidden" | "count" | "preview";
@@ -477,7 +480,7 @@ function shouldRegisterSearchTools(pi: ExtensionAPI): boolean {
 	return !isFffOverrideMode(pi);
 }
 
-let toolBackgroundOverride: "default" | "transparent" | "outlines" | null = null;
+let toolBackgroundOverride: "default" | "transparent" | "outlines" | "block" | null = null;
 
 function syncToolBackgroundMode(): void {
 	if (toolBackgroundOverride) {
@@ -487,7 +490,7 @@ function syncToolBackgroundMode(): void {
 	const settings = readSettings();
 	// Backward compat: "border" is accepted as the old name for "outlines".
 	const raw = settings.toolBackground === "border" ? "outlines" : settings.toolBackground;
-	toolBackgroundMode = raw ?? "transparent";
+	toolBackgroundMode = raw ?? "block";
 }
 
 function setThemeBg(theme: unknown, key: string, value: string): void {
@@ -501,6 +504,13 @@ function setThemeBg(theme: unknown, key: string, value: string): void {
 
 function applyToolBackgroundMode(theme: unknown): void {
 	syncToolBackgroundMode();
+	if (toolBackgroundMode === "block") {
+		setThemeBg(theme, "userMessageBg", BLOCK_ROW_BG);
+		setThemeBg(theme, "toolPendingBg", BLOCK_ROW_BG);
+		setThemeBg(theme, "toolSuccessBg", BLOCK_ROW_BG);
+		setThemeBg(theme, "toolErrorBg", BLOCK_ROW_BG);
+		return;
+	}
 	setThemeBg(theme, "userMessageBg", TRANSPARENT_BG);
 	if (toolBackgroundMode === "default") return;
 
@@ -657,14 +667,32 @@ function patchGlobalToolBorders(): void {
 			return rendered;
 		}
 		const indentTool = shouldIndentToolExecution(this);
-		const core = textLines.map((line) => {
-			const normalized = normalizeLeadingCheckGlyph(line);
-			return clampLineWidth(indentTool && normalized ? ` ${normalized}` : normalized, width);
-		});
-		const spacerLine = " ".repeat(width);
 		let result: string[];
-
-		result = [spacerLine, ...core, ...imageLines];
+		if (toolBackgroundMode === "block") {
+			// Block mode: render tool rows as solid dark blocks matching pi-block-style.
+			// Strip transparent bg escapes and re-apply row bg after every ANSI reset
+			// so the background fill covers the entire line.
+			const bg = BLOCK_ROW_BG;
+			const core = textLines.map((line) => {
+				const normalized = normalizeLeadingCheckGlyph(line);
+				const text = clampLineWidth(indentTool && normalized ? ` ${normalized}` : normalized, width);
+				const safe = text
+					.replace(/\x1b\[49m/g, "")
+					.replace(/\x1b\[0m/g, (m) => `${m}${bg}`);
+				const plainLen = visibleWidth(stripAnsi(line));
+				const padding = plainLen < width ? " ".repeat(width - plainLen) : "";
+				return `${bg}${safe}${padding}\x1b[0m`;
+			});
+			const spacer = `${bg}${" ".repeat(width)}\x1b[0m`;
+			result = [spacer, ...core, spacer, ...imageLines];
+		} else {
+			const core = textLines.map((line) => {
+				const normalized = normalizeLeadingCheckGlyph(line);
+				return clampLineWidth(indentTool && normalized ? ` ${normalized}` : normalized, width);
+			});
+			const spacerLine = " ".repeat(width);
+			result = [spacerLine, ...core, ...imageLines];
+		}
 
 		(this as any)[TOOL_RENDER_CACHE] = { width, mode: toolBackgroundMode, lines: result };
 		return result;
@@ -970,6 +998,19 @@ function frameToolLikeLines(lines: string[], width: number): string[] {
 	const safeWidth = Math.max(1, width);
 	const core = trimRenderedBlankLines(lines).map((line) => clampLineWidth(line, safeWidth));
 	if (core.length === 0 || toolBackgroundMode === "default") return core;
+	if (toolBackgroundMode === "block") {
+		const bg = BLOCK_ROW_BG;
+		const filled = core.map((line) => {
+			const safe = line
+				.replace(/\x1b\[49m/g, "")
+				.replace(/\x1b\[0m/g, (m) => `${m}${bg}`);
+			const plainLen = visibleWidth(stripAnsi(line));
+			const padding = plainLen < safeWidth ? " ".repeat(safeWidth - plainLen) : "";
+			return `${bg}${safe}${padding}\x1b[0m`;
+		});
+		const spacer = `${bg}${" ".repeat(safeWidth)}\x1b[0m`;
+		return [spacer, ...filled];
+	}
 	const spacerLine = " ".repeat(safeWidth);
 	return [spacerLine, ...core];
 }
@@ -1058,7 +1099,9 @@ function promptUserMessageLine(line: string, width: number, firstLine: boolean):
 	const contentWidth = Math.max(1, width - visibleWidth(prefix));
 	const content = clampLineWidth(cleanUserMessageLine(line), contentWidth);
 	const padding = " ".repeat(Math.max(0, contentWidth - visibleWidth(content)));
-	return `${USER_MESSAGE_BG}${USER_MESSAGE_PROMPT_FG}${prefix}${TRANSPARENT_RESET}${USER_MESSAGE_BG}${content}${padding}${TRANSPARENT_RESET}`;
+	const bg = USER_MESSAGE_BG;
+	const reset = toolBackgroundMode === "block" ? `\x1b[0m${bg}` : TRANSPARENT_RESET;
+	return `${bg}${USER_MESSAGE_PROMPT_FG}${prefix}${reset}${bg}${content}${padding}${reset}`;
 }
 
 function patchUserMessageRender(): void {
@@ -1092,7 +1135,8 @@ function promptEditorBorder(line: string, width: number): string {
 	const plain = line.replace(ANSI_RE, "");
 	const indicator = plain.includes("↑") || plain.includes("↓") ? clampLineWidth(plain, width) : "";
 	const text = indicator ? indicator + "─".repeat(Math.max(0, width - visibleWidth(indicator))) : "─".repeat(Math.max(0, width));
-	return `${INPUT_PROMPT_FG}${text}${TRANSPARENT_RESET}`;
+	const bg = toolBackgroundMode === "block" ? BLOCK_ROW_BG : TRANSPARENT_BG;
+	return `${INPUT_PROMPT_FG}${text}\x1b[0m${bg}`;
 }
 
 function isPromptEditorBorderLine(line: string): boolean {
@@ -1105,7 +1149,8 @@ function promptEditorContentLine(line: string, width: number, firstLine: boolean
 	const contentWidth = Math.max(0, width - visibleWidth(prefix));
 	const content = clampLineWidth(line, contentWidth);
 	const padding = " ".repeat(Math.max(0, contentWidth - visibleWidth(content)));
-	return `${INPUT_ARROW_FG}${prefix}${TRANSPARENT_RESET}${content}${padding}`;
+	const bg = toolBackgroundMode === "block" ? BLOCK_ROW_BG : TRANSPARENT_BG;
+	return `${INPUT_ARROW_FG}${prefix}\x1b[0m${bg}${content}${padding}\x1b[0m`;
 }
 
 function patchEditorRender(): void {
@@ -4222,9 +4267,9 @@ export default function (pi: ExtensionAPI) {
 
 	// /cc-tools command — toggle tool display style at runtime.
 	// "outlines" is kept as a backward-compatible alias for transparent.
-	const TOOL_MODES = ["outlines", "transparent", "default"] as const;
+	const TOOL_MODES = ["outlines", "transparent", "default", "block"] as const;
 	pi.registerCommand("cc-tools", {
-		description: "Switch tool display style: transparent (no chrome), default (pi built-in backgrounds)",
+		description: "Switch tool display style: block (solid bg fills), transparent (no chrome), default (pi built-in backgrounds)",
 		getArgumentCompletions(prefix) {
 			return TOOL_MODES
 				.filter((m) => m.startsWith(prefix))
@@ -4234,6 +4279,7 @@ export default function (pi: ExtensionAPI) {
 					description:
 						m === "outlines" ? "Legacy alias for transparent"
 						: m === "transparent" ? "No borders or backgrounds"
+						: m === "block" ? "Solid block backgrounds (default)"
 						: "Pi built-in tool backgrounds",
 				}));
 		},
