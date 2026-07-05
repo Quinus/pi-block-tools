@@ -505,13 +505,6 @@ function setThemeBg(theme: unknown, key: string, value: string): void {
 
 function applyToolBackgroundMode(theme: unknown): void {
 	syncToolBackgroundMode();
-	if (toolBackgroundMode === "block") {
-		// Don't set any theme bg colors — let patchGlobalToolBorders handle
-		// all backgrounds. Pi's built-in rendering injects explicit \x1b[48;2;...m
-		// codes when these theme values are set, which override our per-line bg.
-		setThemeBg(theme, "userMessageBg", TRANSPARENT_BG);
-		return;
-	}
 	setThemeBg(theme, "userMessageBg", TRANSPARENT_BG);
 	if (toolBackgroundMode === "default") return;
 
