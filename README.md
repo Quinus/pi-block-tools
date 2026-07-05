@@ -17,8 +17,9 @@ Block-styled Claude Code inspired tool rendering for Pi — Shiki-powered diffs,
 - **Subagent completion notifications** restyled to match the same Claude-style tool rows
 - **RTK rewrite integration** that folds rewrite notices into the bash tool row with a muted `(RTK)` badge and expanded-only rewrite details
 - **Transparent tool backgrounds** in `transparent` mode
-- **Theme-adaptive palette** — branch connectors, dim text, spinner accent, and diff backgrounds automatically follow the active pi theme (set `themeAdaptive: false` to keep the fixed Claude-style palette)
-- **Transparent edit/write diffs** with universal red/green diff colors
+- **pi-block-style palette** — branch connectors, user prompts, spinner text, and diff accents use the same Atom One Dark colors as `pi-block-style`
+- **Theme-adaptive palette** — branch connectors, dim text, spinner accent, and diff backgrounds can still follow the active pi theme (set `themeAdaptive: false` to keep the fixed block-style palette)
+- **Transparent edit/write diffs** with Atom One Dark green/red diff colors
 - **Global transparent chrome patch** for all tool rows, including unknown/custom tools
 
 ## Configuration
@@ -37,14 +38,14 @@ Set in `.pi/settings.json` or `~/.pi/settings.json`:
   "liveToolPreview": true,
   "liveToolPreviewLines": 5,
   "diffCollapsedLines": 24,
-  "themeAdaptive": true,
+  "themeAdaptive": false,
   "diffTheme": "github-dark"
 }
 ```
 
 ### Theme integration
 
-When `themeAdaptive` is `true` (default), the following colors are derived from the active pi theme on every render and re-derived whenever the theme changes:
+By default, `pi-block-tools` uses the fixed `pi-block-style` Atom One Dark palette. When `themeAdaptive` is `true`, the following colors are derived from the active pi theme on every render and re-derived whenever the theme changes:
 
 | Element | Derived from |
 |---------|--------------|
@@ -58,7 +59,7 @@ When `themeAdaptive` is `true` (default), the following colors are derived from 
 
 User-supplied `diffTheme` presets and `diffColors` overrides always win over theme-derived defaults. File-type icons (e.g. `ts`, `py`, `rs`) keep their language-identity colors and are not theme-derived.
 
-Set `themeAdaptive: false` to keep the original fixed Claude-style palette regardless of the active pi theme.
+Set `themeAdaptive: false` to keep the fixed `pi-block-style` Atom One Dark palette regardless of the active pi theme.
 
 #### Toggle at runtime with `/cc-theme`
 
@@ -74,13 +75,13 @@ The selection is persisted to `~/.pi/settings.json` and applied to the next rend
 
 #### Repaint the spinner with `/cc-spinner`
 
-The spinner glyph itself is still colored by pi's loader using `accent`, while the verb text (e.g. `Cooking…`) follows `borderAccent` by default so it stays lively without being the exact same color as the glyph. The status suffix (e.g. `(thinking · ↓ 10 tokens · 2s)`) follows `muted`. Use `/cc-spinner` to bind either text element to any other theme color key:
+The spinner glyph itself is still colored by pi's loader using `accent`, while the verb text (e.g. `Cooking…`) follows `accent` by default to match `pi-block-style` blue. The status suffix (e.g. `(thinking · ↓ 10 tokens · 2s)`) follows `muted`. Use `/cc-spinner` to bind either text element to any other theme color key:
 
 ```text
 /cc-spinner preview          # list every common theme key with a colored sample
 /cc-spinner verb <key>       # change the verb color (e.g. thinkingHigh, mdHeading)
 /cc-spinner status <key>     # change the status suffix color
-/cc-spinner reset            # restore defaults (verb=borderAccent, status=muted)
+/cc-spinner reset            # restore defaults (verb=accent, status=muted)
 ```
 
 The selection is persisted as `spinnerVerbColor` / `spinnerStatusColor` in `~/.pi/settings.json` and applied on the next spinner tick.

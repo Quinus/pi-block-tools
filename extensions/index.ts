@@ -49,10 +49,49 @@ const RESET = "\x1b[0m";
 const TRANSPARENT_BG = "\x1b[49m";
 const TRANSPARENT_RESET = `${RESET}${TRANSPARENT_BG}`;
 
+// Atom One Dark palette shared with pi-block-style.
+const BLOCK_COLORS = {
+	bg: "#282c34",
+	fg: "#abb2bf",
+	black: "#282c34",
+	red: "#e06c75",
+	green: "#98c379",
+	yellow: "#e5c07b",
+	blue: "#61afef",
+	purple: "#c678dd",
+	cyan: "#56b6c2",
+	gray: "#5c6370",
+	darkgray: "#3e4451",
+	mutedBlue: "#666C75",
+	darker: "#21252B",
+};
+
+function blockFg(hex: string): string {
+	const r = Number.parseInt(hex.slice(1, 3), 16);
+	const g = Number.parseInt(hex.slice(3, 5), 16);
+	const b = Number.parseInt(hex.slice(5, 7), 16);
+	return `\x1b[38;2;${r};${g};${b}m`;
+}
+
+function blockBg(hex: string): string {
+	const r = Number.parseInt(hex.slice(1, 3), 16);
+	const g = Number.parseInt(hex.slice(3, 5), 16);
+	const b = Number.parseInt(hex.slice(5, 7), 16);
+	return `\x1b[48;2;${r};${g};${b}m`;
+}
+
+const BLOCK_FG = blockFg(BLOCK_COLORS.fg);
+const BLOCK_DARK_BG = blockBg(BLOCK_COLORS.darkgray);
+const BLOCK_BLUE_FG = blockFg(BLOCK_COLORS.blue);
+const BLOCK_GREEN_FG = blockFg(BLOCK_COLORS.green);
+const BLOCK_RED_FG = blockFg(BLOCK_COLORS.red);
+const BLOCK_MUTED_FG = blockFg(BLOCK_COLORS.gray);
+const BLOCK_DARKER_FG = blockFg(BLOCK_COLORS.darker);
+
 // Border / branch rule colors. Defaults match the previous hardcoded values
 // so behavior is identical when the theme is unavailable or themeAdaptive=false.
 // `applyThemePaletteIfNeeded(theme)` re-derives these from `theme.fg("borderMuted"|"muted")`.
-let BORDER_COLOR = "\x1b[38;5;238m";
+let BORDER_COLOR = BLOCK_MUTED_FG;
 const ANSI_RE = /\x1b\[[0-9;]*m/g;
 const ANSI_PRESENT_RE = /\x1b\[[0-9;]*m/;
 const PATCH_FLAG = Symbol.for("pi-claude-style-tools:patched-container-render");
@@ -94,8 +133,9 @@ interface SettingsFile {
 	diffTheme?: string;
 	diffColors?: Record<string, string>;
 	/**
-	 * When true (default), derive borders, dim text, branch rules, and diff
-	 * accents from the active pi theme via `theme.getFgAnsi`/`getBgAnsi`.
+	 * When true, derive borders, dim text, branch rules, and diff accents from
+	 * the active pi theme via `theme.getFgAnsi`/`getBgAnsi`. Defaults to false
+	 * so the extension matches pi-block-style's fixed Atom One Dark palette.
 	 * Explicit `diffTheme` / `diffColors` always win over theme-derived
 	 * defaults so users keep full control.
 	 */
@@ -677,7 +717,7 @@ const WORKED_DURATION_KEY = "_piClaudeStyleWorkedDurationMs";
 const WORKED_START_KEY = "_piClaudeStyleWorkedStartMs";
 const WORKED_DURATION_MARKER = "Worked for";
 // WORKED_LINE_FG is theme-derived (from "muted") when themeAdaptive is on.
-let WORKED_LINE_FG = "\x1b[38;2;140;140;140m";
+let WORKED_LINE_FG = BLOCK_MUTED_FG;
 let currentAgentWorkStartMs: number | undefined;
 let currentAssistantMessageStartMs: number | undefined;
 
@@ -1008,10 +1048,10 @@ function cleanUserMessageLine(line: string): string {
 	return trimAnsiLeft(trimAnsiRight(stripBackgroundAnsi(stripOsc133Zones(line))));
 }
 
-const USER_MESSAGE_BG = "\x1b[48;2;47;47;47m";
-const USER_MESSAGE_PROMPT_FG = "\x1b[38;2;220;220;220m";
-const INPUT_PROMPT_FG = "\x1b[38;2;136;136;136m";
-const INPUT_ARROW_FG = "\x1b[38;2;204;204;204m";
+const USER_MESSAGE_BG = BLOCK_DARK_BG;
+const USER_MESSAGE_PROMPT_FG = BLOCK_BLUE_FG;
+const INPUT_PROMPT_FG = BLOCK_MUTED_FG;
+const INPUT_ARROW_FG = BLOCK_BLUE_FG;
 
 function promptUserMessageLine(line: string, width: number, firstLine: boolean): string {
 	const prefix = firstLine ? "› " : "  ";
@@ -2029,7 +2069,7 @@ let _themePaletteCacheTheme: unknown = null;
 
 function themeAdaptiveEnabled(): boolean {
 	const settings = readSettings();
-	return settings.themeAdaptive !== false;
+	return settings.themeAdaptive === true;
 }
 
 let DIFF_THEME: BundledTheme = (process.env.DIFF_THEME as BundledTheme | undefined) ?? "github-dark";
@@ -2061,14 +2101,14 @@ let BG_GUTTER_DEL = "\x1b[49m";
 let BG_EMPTY = "\x1b[49m";
 let BG_BASE = "\x1b[49m";
 
-let FG_ADD = "\x1b[38;2;100;180;120m";
-let FG_DEL = "\x1b[38;2;200;100;100m";
-let FG_DIM = "\x1b[38;2;80;80;80m";
-let FG_LNUM = "\x1b[38;2;100;100;100m";
-let FG_RULE = "\x1b[38;2;50;50;50m";
-let TOOL_RULE = "\x1b[38;2;153;153;153m";
-let FG_SAFE_MUTED = "\x1b[38;2;139;148;158m";
-let FG_STRIPE = "\x1b[38;2;40;40;40m";
+let FG_ADD = BLOCK_GREEN_FG;
+let FG_DEL = BLOCK_RED_FG;
+let FG_DIM = BLOCK_MUTED_FG;
+let FG_LNUM = BLOCK_MUTED_FG;
+let FG_RULE = BLOCK_MUTED_FG;
+let TOOL_RULE = BLOCK_MUTED_FG;
+let FG_SAFE_MUTED = BLOCK_FG;
+let FG_STRIPE = BLOCK_DARKER_FG;
 
 let DIVIDER = `${FG_RULE}│${D_RST}`;
 
@@ -2097,9 +2137,9 @@ function mixBg(
 const ADDITION_TINT_TARGET = { r: 84, g: 190, b: 118 };
 const DELETION_TINT_TARGET = { r: 232, g: 95, b: 122 };
 // Fallback base that matches most dark themes (NOT black)
-const FALLBACK_BASE_BG = { r: 32, g: 35, b: 42 };
-const UNIVERSAL_DIFF_ADD_FG = { r: 110, g: 210, b: 130 };
-const UNIVERSAL_DIFF_DEL_FG = { r: 225, g: 110, b: 110 };
+const FALLBACK_BASE_BG = { r: 40, g: 44, b: 52 };
+const UNIVERSAL_DIFF_ADD_FG = { r: 152, g: 195, b: 121 };
+const UNIVERSAL_DIFF_DEL_FG = { r: 224, g: 108, b: 117 };
 
 function mixRgb(
 	a: { r: number; g: number; b: number },
@@ -2155,16 +2195,16 @@ const _explicitFgFields = new Set<"fgAdd" | "fgDel" | "fgDim" | "fgLnum" | "fgRu
 // Original Claude-Code-style palette captured at module-load so we can
 // restore it when the user toggles themeAdaptive off at runtime.
 const _claudeStyleDefaults = {
-	BORDER_COLOR: "\x1b[38;5;238m",
-	WORKED_LINE_FG: "\x1b[38;2;140;140;140m",
-	TOOL_RULE: "\x1b[38;2;153;153;153m",
-	FG_DIM: "\x1b[38;2;80;80;80m",
-	FG_LNUM: "\x1b[38;2;100;100;100m",
-	FG_RULE: "\x1b[38;2;50;50;50m",
-	FG_STRIPE: "\x1b[38;2;40;40;40m",
-	FG_SAFE_MUTED: "\x1b[38;2;139;148;158m",
-	FG_ADD: "\x1b[38;2;100;180;120m",
-	FG_DEL: "\x1b[38;2;200;100;100m",
+	BORDER_COLOR: BLOCK_MUTED_FG,
+	WORKED_LINE_FG: BLOCK_MUTED_FG,
+	TOOL_RULE: BLOCK_MUTED_FG,
+	FG_DIM: BLOCK_MUTED_FG,
+	FG_LNUM: BLOCK_MUTED_FG,
+	FG_RULE: BLOCK_MUTED_FG,
+	FG_STRIPE: BLOCK_DARKER_FG,
+	FG_SAFE_MUTED: BLOCK_FG,
+	FG_ADD: BLOCK_GREEN_FG,
+	FG_DEL: BLOCK_RED_FG,
 };
 
 function resetThemePalette(): void {

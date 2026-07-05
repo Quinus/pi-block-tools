@@ -15,8 +15,8 @@ const RESET = "\x1b[0m";
 // Defaults match the previous hardcoded values so behavior is identical
 // when no theme is available or themeAdaptive=false. `applyThemeColors`
 // below re-derives them from the active pi theme each tick.
-let CLAUDE_ORANGE = "\x1b[38;2;215;119;87m";
-let STATUS_DIM = "\x1b[38;2;153;153;153m";
+let CLAUDE_ORANGE = "\x1b[38;2;97;175;239m";
+let STATUS_DIM = "\x1b[38;2;92;99;112m";
 
 // Short TTL so /cc-spinner changes are picked up within ~1s without
 // re-reading the file on every 250ms spinner tick.
@@ -37,11 +37,11 @@ function readSpinnerSettings(): { adaptive: boolean; verbColor: string; statusCo
 	if (_spinnerSettingsCache && _spinnerSettingsCache.expires > now) {
 		return _spinnerSettingsCache.value;
 	}
-	let adaptive = true;
+	let adaptive = false;
 	// Spinner glyph is still pi's accent. Use borderAccent for the verb so it
 	// feels themed and lively without collapsing into the exact same Claude
 	// orange as the glyph on themes like openAntigravity-dark.
-	let verbColor = "borderAccent";
+	let verbColor = "accent";
 	let statusColor = "muted";
 	const paths = [`${process.cwd()}/.pi/settings.json`, `${process.env.HOME ?? ""}/.pi/settings.json`];
 	for (const p of paths) {
@@ -49,6 +49,7 @@ function readSpinnerSettings(): { adaptive: boolean; verbColor: string; statusCo
 			if (!p || !existsSync(p)) continue;
 			const raw = JSON.parse(readFileSync(p, "utf8"));
 			if (raw && typeof raw === "object") {
+				if (raw.themeAdaptive === true) adaptive = true;
 				if (raw.themeAdaptive === false) adaptive = false;
 				if (typeof raw.spinnerVerbColor === "string" && raw.spinnerVerbColor.length > 0) verbColor = raw.spinnerVerbColor;
 				if (typeof raw.spinnerStatusColor === "string" && raw.spinnerStatusColor.length > 0) statusColor = raw.spinnerStatusColor;
@@ -65,8 +66,8 @@ function themeAdaptiveEnabled(): boolean {
 }
 
 // Original Claude-style values restored when the user turns adaptive off.
-const _DEFAULT_CLAUDE_ORANGE = "\x1b[38;2;215;119;87m";
-const _DEFAULT_STATUS_DIM = "\x1b[38;2;153;153;153m";
+const _DEFAULT_CLAUDE_ORANGE = "\x1b[38;2;97;175;239m";
+const _DEFAULT_STATUS_DIM = "\x1b[38;2;92;99;112m";
 
 let _themeColorsCacheTheme: unknown = null;
 let _themeColorsLastAdaptive: boolean | null = null;
