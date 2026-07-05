@@ -506,10 +506,10 @@ function setThemeBg(theme: unknown, key: string, value: string): void {
 function applyToolBackgroundMode(theme: unknown): void {
 	syncToolBackgroundMode();
 	if (toolBackgroundMode === "block") {
-		setThemeBg(theme, "userMessageBg", BLOCK_USER_BG);
-		setThemeBg(theme, "toolPendingBg", BLOCK_BODY_BG);
-		setThemeBg(theme, "toolSuccessBg", BLOCK_BODY_BG);
-		setThemeBg(theme, "toolErrorBg", BLOCK_BODY_BG);
+		// Don't set any theme bg colors — let patchGlobalToolBorders handle
+		// all backgrounds. Pi's built-in rendering injects explicit \x1b[48;2;...m
+		// codes when these theme values are set, which override our per-line bg.
+		setThemeBg(theme, "userMessageBg", TRANSPARENT_BG);
 		return;
 	}
 	setThemeBg(theme, "userMessageBg", TRANSPARENT_BG);
@@ -522,6 +522,23 @@ function applyToolBackgroundMode(theme: unknown): void {
 
 function stripAnsi(text: string): string {
 	return text.replace(ANSI_RE, "");
+}
+
+/**
+ * Strip only SGR background codes (\x1b[48…m) from text.
+ * Parses the semicolon-separated parameters so `48` as a standalone
+ * parameter (background set) is removed, while `48` as a color value
+ * in sequences like `38;5;48` is also removed (rare edge case — color
+ * index 48 is a brownish 256-color that is almost never used).
+ */
+function stripBackgroundCodes(text: string): string {
+	return text.replace(/\x1b\[[0-9;]+m/g, (match) => {
+		const params = match.slice(2, -1).split(";").map(Number);
+		for (const p of params) {
+			if (p === 48) return "";
+		}
+		return match;
+	});
 }
 
 const GENTLE_AI_BANNER_INFO_RE = /^\s*(?:GIT|PATH|MCP|PLUGINS|AGENTS|SKILLS|EXTENSIONS|VER|TOOLS):\b/i;
@@ -691,7 +708,9 @@ function patchGlobalToolBorders(): void {
 						text = strippedBefore + afterWrap;
 					}
 				}
-				const safe = text
+				// Strip pi-injected bg codes + transparent bg, then re-apply
+				// our bg after every reset so it spans the full line.
+				const safe = stripBackgroundCodes(text)
 					.replace(/\x1b\[49m/g, "")
 					.replace(/\x1b\[0m/g, (m) => `${m}${bg}`);
 				const plainLen = visibleWidth(stripAnsi(safe));
@@ -1031,7 +1050,8 @@ function frameToolLikeLines(lines: string[], width: number): string[] {
 					text = strippedBefore + afterWrap;
 				}
 			}
-			const safe = text
+			// Strip pi-injected bg codes + transparent bg, then re-apply our bg
+			const safe = stripBackgroundCodes(text)
 				.replace(/\x1b\[49m/g, "")
 				.replace(/\x1b\[0m/g, (m) => `${m}${bg}`);
 			const plainLen = visibleWidth(stripAnsi(safe));
