@@ -16,7 +16,7 @@ Block-styled Claude Code inspired tool rendering for Pi — Shiki-powered diffs,
 - **Live running previews** that show a few output lines for active tool calls (latest lines for bash), persisting until the next tool/text activity
 - **Subagent completion notifications** restyled to match the same Claude-style tool rows
 - **RTK rewrite integration** that folds rewrite notices into the bash tool row with a muted `(RTK)` badge and expanded-only rewrite details
-- **Homescreen-style block rendering** — each tool call renders as a two-part block: a gray header (`#5c6370`) with the tool name, and a darker detail block (`#21252B`) with the tool's args and results
+- **Homescreen-style block rendering** — each tool call renders as a two-part block: a gray header (`#5c6370`) with the tool name, and a darker detail block (`#282C34`) with the tool's args and results
 - **No branch connectors** — content is indented naturally inside the detail block
 - **Block-mode backgrounds** for user messages (`#3e4451`) and editor (`#21252B`)
 - **pi-block-style palette** — spinner text and diff accents use the same Atom One Dark colors as `pi-block-style`
@@ -27,11 +27,9 @@ Block-styled Claude Code inspired tool rendering for Pi — Shiki-powered diffs,
 ### Example rendering
 
 ```
-┌──────────────────────────────────┐  ← gray spacer (#5c6370)
 │ ● Bash                           │  ← gray header (#5c6370)
-│   npm install                    │  ← darker detail (#21252B)
+│   npm install                    │  ← darker detail (#282C34)
 │   Done (42 lines)                │
-└──────────────────────────────────┘  ← darker spacer (#21252B)
 ```
 
 ## Configuration

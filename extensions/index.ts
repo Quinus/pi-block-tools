@@ -89,7 +89,7 @@ const BLOCK_MUTED_FG = blockFg(BLOCK_COLORS.gray);
 const BLOCK_DARKER_FG = blockFg(BLOCK_COLORS.darker);
 const BLOCK_ROW_BG = BLOCK_DARK_BG;
 const BLOCK_HEADER_BG = blockBg(BLOCK_COLORS.gray);
-const BLOCK_BODY_BG = blockBg(BLOCK_COLORS.darker);
+const BLOCK_BODY_BG = blockBg(BLOCK_COLORS.bg);
 const BLOCK_USER_BG = blockBg(BLOCK_COLORS.darkgray);
 
 // Border / branch rule colors. Defaults match the previous hardcoded values
@@ -680,11 +680,7 @@ function patchGlobalToolBorders(): void {
 		const indentTool = shouldIndentToolExecution(this);
 		let result: string[];
 		if (toolBackgroundMode === "block") {
-			// ToolText.render handles per-line block backgrounds.
-			// Just pass content through and add top/bottom spacers.
-			const headerSpacer = `${BLOCK_HEADER_BG}${" ".repeat(width)}\x1b[0m`;
-			const bodySpacer = `${BLOCK_BODY_BG}${" ".repeat(width)}\x1b[0m`;
-			result = [headerSpacer, ...textLines, bodySpacer, ...imageLines];
+			result = [...textLines, ...imageLines];
 		} else {
 			const core = textLines.map((line) => {
 				const normalized = normalizeLeadingCheckGlyph(line);
@@ -1010,9 +1006,7 @@ function frameToolLikeLines(lines: string[], width: number): string[] {
 				blocks.push(applyBlockBg(line, safeWidth, BLOCK_BODY_BG));
 			}
 		}
-		const headerSpacer = `${BLOCK_HEADER_BG}${" ".repeat(safeWidth)}\x1b[0m`;
-		const bodySpacer = `${BLOCK_BODY_BG}${" ".repeat(safeWidth)}\x1b[0m`;
-		return [headerSpacer, ...blocks, bodySpacer];
+		return blocks;
 	}
 	const spacerLine = " ".repeat(safeWidth);
 	return [spacerLine, ...core];
