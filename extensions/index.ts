@@ -680,39 +680,11 @@ function patchGlobalToolBorders(): void {
 		const indentTool = shouldIndentToolExecution(this);
 		let result: string[];
 		if (toolBackgroundMode === "block") {
-			// Block mode: render tool rows in the pi-homescreen-block style.
-			// First line = title block (gray bg #5c6370, bold dark text).
-			// Remaining lines = detail block (darker bg #21252B, light text).
-			// Branch connectors (├─ └─ │) are stripped from detail lines.
-			const blocks: string[] = [];
-			for (const rawLine of textLines) {
-				if (isBlankLine(rawLine)) continue;
-				const isHeader = blocks.length === 0;
-				const bg = isHeader ? BLOCK_HEADER_BG : BLOCK_BODY_BG;
-				const normalized = normalizeLeadingCheckGlyph(rawLine);
-				let text = clampLineWidth(indentTool && normalized ? ` ${normalized}` : normalized, width);
-				if (!isHeader) {
-					// Strip branch connector prefix: ANSI + branch char + reset + spaces + 
-					const wrapIdx = text.indexOf("\uE000");
-					if (wrapIdx >= 0) {
-						const beforeWrap = text.slice(0, wrapIdx);
-						const afterWrap = text.slice(wrapIdx + 1);
-						const strippedBefore = beforeWrap.replace(/^[\s\x1b\[0-9;m├└─│]*/, "");
-						text = strippedBefore + afterWrap;
-					}
-				}
-				// Strip pi-injected bg codes + transparent bg, then re-apply
-				// our bg after every reset so it spans the full line.
-				const safe = stripBackgroundCodes(text)
-					.replace(/\x1b\[49m/g, "")
-					.replace(/\x1b\[0m/g, (m) => `${m}${bg}`);
-				const plainLen = visibleWidth(stripAnsi(safe));
-				const padding = plainLen < width ? " ".repeat(width - plainLen) : "";
-				blocks.push(`${bg}${safe}${padding}\x1b[0m`);
-			}
+			// ToolText.render handles per-line block backgrounds.
+			// Just pass content through and add top/bottom spacers.
 			const headerSpacer = `${BLOCK_HEADER_BG}${" ".repeat(width)}\x1b[0m`;
 			const bodySpacer = `${BLOCK_BODY_BG}${" ".repeat(width)}\x1b[0m`;
-			result = [headerSpacer, ...blocks, bodySpacer, ...imageLines];
+			result = [headerSpacer, ...textLines, bodySpacer, ...imageLines];
 		} else {
 			const core = textLines.map((line) => {
 				const normalized = normalizeLeadingCheckGlyph(line);
@@ -1028,28 +1000,15 @@ function frameToolLikeLines(lines: string[], width: number): string[] {
 	if (core.length === 0 || toolBackgroundMode === "default") return core;
 	if (toolBackgroundMode === "block") {
 		const blocks: string[] = [];
+		let foundHeader = false;
 		for (const line of core) {
 			if (isBlankLine(line)) continue;
-			const isHeader = blocks.length === 0;
-			const bg = isHeader ? BLOCK_HEADER_BG : BLOCK_BODY_BG;
-			// Strip branch connector prefix
-			let text = line;
-			if (!isHeader) {
-				const wrapIdx = text.indexOf("\uE000");
-				if (wrapIdx >= 0) {
-					const beforeWrap = text.slice(0, wrapIdx);
-					const afterWrap = text.slice(wrapIdx + 1);
-					const strippedBefore = beforeWrap.replace(/^[\s\x1b\[0-9;m├└─│]*/, "");
-					text = strippedBefore + afterWrap;
-				}
+			if (!foundHeader) {
+				foundHeader = true;
+				blocks.push(applyBlockBg(line, safeWidth, BLOCK_HEADER_BG));
+			} else {
+				blocks.push(applyBlockBg(line, safeWidth, BLOCK_BODY_BG));
 			}
-			// Strip pi-injected bg codes + transparent bg, then re-apply our bg
-			const safe = stripBackgroundCodes(text)
-				.replace(/\x1b\[49m/g, "")
-				.replace(/\x1b\[0m/g, (m) => `${m}${bg}`);
-			const plainLen = visibleWidth(stripAnsi(safe));
-			const padding = plainLen < safeWidth ? " ".repeat(safeWidth - plainLen) : "";
-			blocks.push(`${bg}${safe}${padding}\x1b[0m`);
 		}
 		const headerSpacer = `${BLOCK_HEADER_BG}${" ".repeat(safeWidth)}\x1b[0m`;
 		const bodySpacer = `${BLOCK_BODY_BG}${" ".repeat(safeWidth)}\x1b[0m`;
@@ -1855,6 +1814,20 @@ function padToWidth(line: string, width: number): string {
 	return `${line}${" ".repeat(padding)}`;
 }
 
+/**
+ * Apply a solid block background to a single rendered line.
+ * Strips any existing background codes (including pi-injected ones)
+ * and re-applies `bg` after every ANSI reset so the fill is continuous.
+ */
+function applyBlockBg(line: string, width: number, bg: string): string {
+	const safe = stripBackgroundCodes(line)
+		.replace(/\x1b\[49m/g, "")
+		.replace(/\x1b\[0m/g, (m) => `${m}${bg}`);
+	const plainLen = visibleWidth(stripAnsi(safe));
+	const padding = plainLen < width ? " ".repeat(width - plainLen) : "";
+	return `${bg}${safe}${padding}\x1b[0m`;
+}
+
 function markedContinuationPrefix(prefix: string): string {
 	const plain = stripAnsi(prefix);
 	const branchMatch = /^(\s*)(?:│  |├─ |└─ )/.exec(plain);
@@ -1909,7 +1882,23 @@ class ToolText extends Text {
 		}
 		const contentWidth = Math.max(1, width);
 		const lines = this.value.replace(/\t/g, "   ").split("\n");
-		const rendered = lines.flatMap((line) => wrapMarkedLine(line, contentWidth)).map((line) => padToWidth(line, width));
+		let rendered = lines.flatMap((line) => wrapMarkedLine(line, contentWidth)).map((line) => padToWidth(line, width));
+
+		if (toolBackgroundMode === "block") {
+			let foundHeader = false;
+			rendered = rendered.map((line) => {
+				const isBlank = !stripAnsi(line).trim();
+				let bg: string;
+				if (!foundHeader && !isBlank) {
+					foundHeader = true;
+					bg = BLOCK_HEADER_BG;
+				} else {
+					bg = BLOCK_BODY_BG;
+				}
+				return applyBlockBg(line, width, bg);
+			});
+		}
+
 		this.toolCachedValue = this.value;
 		this.toolCachedWidth = width;
 		this.toolCachedLines = rendered;
