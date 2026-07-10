@@ -16,19 +16,19 @@ Block-styled Claude Code inspired tool rendering for Pi — Shiki-powered diffs,
 - **Live running previews** that show a few output lines for active tool calls (latest lines for bash), persisting until the next tool/text activity
 - **Subagent completion notifications** restyled to match the same Claude-style tool rows
 - **RTK rewrite integration** that folds rewrite notices into the bash tool row with a muted `(RTK)` badge and expanded-only rewrite details
-- **Homescreen-style block rendering** — each tool call renders as a two-part block: a gray header (`#5c6370`) with the tool name, and a darker detail block (`#282C34`) with the tool's args and results
+- **Homescreen-style block rendering** — each tool call renders as a two-part block: a surface2 header (`#585b70`) with the tool name, and a base detail block (`#1e1e2e`) with the tool's args and results
 - **No branch connectors** — content is indented naturally inside the detail block
-- **Block-mode backgrounds** for user messages (`#3e4451`) and editor (`#21252B`)
-- **pi-block-style palette** — spinner text and diff accents use the same Atom One Dark colors as `pi-block-style`
+- **Block-mode backgrounds** for user messages (`#45475a`) and editor (`#181825`)
+- **pi-block-style palette** — spinner text and diff accents use the same Catppuccin Mocha colors as `pi-block-style`
 - **Theme-adaptive palette** — branch connectors, dim text, spinner accent, and diff backgrounds can still follow the active pi theme (set `themeAdaptive: true` to enable)
-- **Transparent edit/write diffs** with Atom One Dark green/red diff colors
+- **Transparent edit/write diffs** with Catppuccin Mocha green/red diff colors
 - **Global transparent chrome patch** for all tool rows, including unknown/custom tools
 
 ### Example rendering
 
 ```
-│ ● Bash                           │  ← gray header (#5c6370)
-│   npm install                    │  ← darker detail (#282C34)
+│ ● Bash                           │  ← surface2 header (#585b70)
+│   npm install                    │  ← base detail (#1e1e2e)
 │   Done (42 lines)                │
 ```
 
@@ -55,7 +55,7 @@ Set in `.pi/settings.json` or `~/.pi/settings.json`:
 
 ### Theme integration
 
-By default, `pi-block-tools` uses the fixed `pi-block-style` Atom One Dark palette. When `themeAdaptive` is `true`, the following colors are derived from the active pi theme on every render and re-derived whenever the theme changes:
+By default, `pi-block-tools` uses the fixed `pi-block-style` Catppuccin Mocha palette. When `themeAdaptive` is `true`, the following colors are derived from the active pi theme on every render and re-derived whenever the theme changes:
 
 | Element | Derived from |
 |---------|--------------|
@@ -69,7 +69,7 @@ By default, `pi-block-tools` uses the fixed `pi-block-style` Atom One Dark palet
 
 User-supplied `diffTheme` presets and `diffColors` overrides always win over theme-derived defaults. File-type icons (e.g. `ts`, `py`, `rs`) keep their language-identity colors and are not theme-derived.
 
-Set `themeAdaptive: false` to keep the fixed `pi-block-style` Atom One Dark palette regardless of the active pi theme.
+Set `themeAdaptive: false` to keep the fixed `pi-block-style` Catppuccin Mocha palette regardless of the active pi theme.
 
 #### Toggle at runtime with `/cc-theme`
 

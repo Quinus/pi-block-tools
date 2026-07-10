@@ -49,21 +49,21 @@ const RESET = "\x1b[0m";
 const TRANSPARENT_BG = "\x1b[49m";
 const TRANSPARENT_RESET = `${RESET}${TRANSPARENT_BG}`;
 
-// Atom One Dark palette shared with pi-block-style.
+// Catppuccin Mocha palette shared with pi-block-style.
 const BLOCK_COLORS = {
-	bg: "#282c34",
-	fg: "#abb2bf",
-	black: "#282c34",
-	red: "#e06c75",
-	green: "#98c379",
-	yellow: "#e5c07b",
-	blue: "#61afef",
-	purple: "#c678dd",
-	cyan: "#56b6c2",
-	gray: "#5c6370",
-	darkgray: "#3e4451",
-	mutedBlue: "#666C75",
-	darker: "#21252B",
+	bg: "#1e1e2e", // base
+	fg: "#cdd6f4", // text
+	black: "#1e1e2e", // base
+	red: "#f38ba8", // red
+	green: "#a6e3a1", // green
+	yellow: "#f9e2af", // yellow
+	blue: "#89b4fa", // blue
+	purple: "#cba6f7", // mauve
+	cyan: "#94e2d5", // teal
+	gray: "#585b70", // surface2
+	darkgray: "#45475a", // surface1
+	mutedBlue: "#7f849c", // overlay1
+	darker: "#181825", // mantle
 };
 
 function blockFg(hex: string): string {
@@ -139,7 +139,7 @@ interface SettingsFile {
 	/**
 	 * When true, derive borders, dim text, branch rules, and diff accents from
 	 * the active pi theme via `theme.getFgAnsi`/`getBgAnsi`. Defaults to false
-	 * so the extension matches pi-block-style's fixed Atom One Dark palette.
+	 * so the extension matches pi-block-style's fixed Catppuccin Mocha palette.
 	 * Explicit `diffTheme` / `diffColors` always win over theme-derived
 	 * defaults so users keep full control.
 	 */
@@ -2206,12 +2206,12 @@ function mixBg(
 }
 
 // pi-tool-display tint targets for diff palette derivation
-const ADDITION_TINT_TARGET = { r: 84, g: 190, b: 118 };
-const DELETION_TINT_TARGET = { r: 232, g: 95, b: 122 };
-// Fallback base that matches most dark themes (NOT black)
-const FALLBACK_BASE_BG = { r: 40, g: 44, b: 52 };
-const UNIVERSAL_DIFF_ADD_FG = { r: 152, g: 195, b: 121 };
-const UNIVERSAL_DIFF_DEL_FG = { r: 224, g: 108, b: 117 };
+const ADDITION_TINT_TARGET = { r: 166, g: 227, b: 161 }; // Catppuccin green
+const DELETION_TINT_TARGET = { r: 243, g: 139, b: 168 }; // Catppuccin red
+// Fallback base that matches the Catppuccin Mocha base (NOT black)
+const FALLBACK_BASE_BG = { r: 30, g: 30, b: 46 };
+const UNIVERSAL_DIFF_ADD_FG = { r: 166, g: 227, b: 161 };
+const UNIVERSAL_DIFF_DEL_FG = { r: 243, g: 139, b: 168 };
 
 function mixRgb(
 	a: { r: number; g: number; b: number },
